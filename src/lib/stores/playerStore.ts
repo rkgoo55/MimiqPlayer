@@ -9,6 +9,7 @@ import { ANALYSIS_CACHE_VERSION } from '../audio/analysisConfig.js';
 import { decodeWavStereo16 } from '../audio/wavUtils';
 import type { WaveformData } from '../types';
 import type { ChordInfo } from '../audio/AudioAnalyzer';
+import { settingsStore } from './settingsStore';
 
 const EQ_STORAGE_KEY = 'mimiqplayer_eq';
 
@@ -73,8 +74,47 @@ function updateMediaSessionPositionState(currentTime: number, duration: number, 
   }
 }
 
+/**
+ * Convert a data URL to a Blob URL so Android Chrome can load it as
+ * media notification artwork (data URLs are silently ignored on Android).
+ * Returns null if the input is falsy.
+ */
+function dataUrlToObjectUrl(dataUrl: string): string {
+  const [header, base64] = dataUrl.split(',');
+  const mimeMatch = header.match(/:(.*?);/);
+  const mime = mimeMatch ? mimeMatch[1] : 'image/jpeg';
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return URL.createObjectURL(new Blob([bytes], { type: mime }));
+}
+
+/** Currently active artwork Blob URL — revoke before creating a new one */
+let _artworkObjectUrl: string | null = null;
+
+function setMediaSessionMetadata(title: string, artist: string, album: string, coverArtDataUrl?: string) {
+  if (!('mediaSession' in navigator)) return;
+  // Revoke old blob URL to avoid leaking memory
+  if (_artworkObjectUrl) {
+    URL.revokeObjectURL(_artworkObjectUrl);
+    _artworkObjectUrl = null;
+  }
+  let artwork: MediaImage[] = [];
+  if (coverArtDataUrl) {
+    try {
+      _artworkObjectUrl = dataUrlToObjectUrl(coverArtDataUrl);
+      artwork = [{ src: _artworkObjectUrl, sizes: '512x512', type: 'image/jpeg' }];
+    } catch {
+      // fall back to no artwork
+    }
+  }
+  navigator.mediaSession.metadata = new MediaMetadata({ title, artist, album, artwork });
+}
+
 /** Most recently loaded AudioBuffer — used for structure analysis */
 let _currentAudioBuffer: AudioBuffer | null = null;
+/** Cached track metadata for the currently loaded track — used to refresh Media Session on play() */
+let _currentTrackMeta: { title: string; artist: string; album: string; coverArt?: string } | null = null;
 
 /** Active Wake Lock sentinel — prevents screen sleep during playback */
 let wakeLock: WakeLockSentinel | null = null;
@@ -82,6 +122,7 @@ let wakeLock: WakeLockSentinel | null = null;
 let _isPlaying = false;
 async function requestWakeLock() {
   if (!('wakeLock' in navigator)) return;
+  if (wakeLock && !wakeLock.released) return; // already held
   try {
     wakeLock = await navigator.wakeLock.request('screen');
   } catch {
@@ -94,17 +135,43 @@ function releaseWakeLock() {
     wakeLock = null;
   }
 }
+/**
+ * Acquire or release the wake lock based on current playing state and
+ * the keepAwake setting. Call this whenever either changes.
+ */
+function syncWakeLock() {
+  const { keepAwake } = get(settingsStore);
+  if (keepAwake || _isPlaying) {
+    void requestWakeLock();
+  } else {
+    releaseWakeLock();
+  }
+}
 // Re-acquire when the page becomes visible again after a background period
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && _isPlaying) {
-    void requestWakeLock();
-    // Resume AudioContext and flush SoundTouch buffers to prevent crackle noise
-    void engine.handleForeground();
-    if ('mediaSession' in navigator) {
-      navigator.mediaSession.playbackState = 'playing';
+  if (document.visibilityState === 'visible') {
+    syncWakeLock();
+    if (_isPlaying) {
+      // Resume AudioContext and flush SoundTouch buffers to prevent crackle noise
+      void engine.handleForeground();
+      // Re-set metadata and state — OS may have cleared them while backgrounded
+      if (_currentTrackMeta) {
+        setMediaSessionMetadata(
+          _currentTrackMeta.title,
+          _currentTrackMeta.artist,
+          _currentTrackMeta.album,
+          _currentTrackMeta.coverArt,
+        );
+      }
+      if ('mediaSession' in navigator) {
+        navigator.mediaSession.playbackState = 'playing';
+      }
     }
   }
 });
+
+// Sync wake lock whenever keepAwake setting changes
+settingsStore.subscribe(() => syncWakeLock());
 
 const initialState: PlayerState = {
   trackId: null,
@@ -159,7 +226,7 @@ function createPlayerStore() {
     update((s) => ({ ...s, isPlaying: false, currentTime: 0 }));
     stopABCheck();
     _isPlaying = false;
-    releaseWakeLock();
+    syncWakeLock();
     if ('mediaSession' in navigator) {
       navigator.mediaSession.playbackState = 'paused';
     }
@@ -203,18 +270,20 @@ function createPlayerStore() {
 
         bookmarks.set(meta?.bookmarks ?? []);
 
-        // Update Media Session metadata now that we have title / artist / art
-        if ('mediaSession' in navigator) {
-          const artwork: MediaImage[] = meta?.coverArt
-            ? [{ src: meta.coverArt, sizes: '512x512', type: 'image/jpeg' }]
-            : [];
-          navigator.mediaSession.metadata = new MediaMetadata({
-            title: meta?.title || '',
-            artist: meta?.artist || '',
-            album: meta?.album || '',
-            artwork,
-          });
-        }
+        // Cache metadata and update Media Session.
+        // Use a Blob URL for artwork so Android Chrome can show it in the notification.
+        _currentTrackMeta = {
+          title: meta?.title || '',
+          artist: meta?.artist || '',
+          album: meta?.album || '',
+          coverArt: meta?.coverArt,
+        };
+        setMediaSessionMetadata(
+          _currentTrackMeta.title,
+          _currentTrackMeta.artist,
+          _currentTrackMeta.album,
+          _currentTrackMeta.coverArt,
+        );
 
         // Restore per-track EQ (fallback to global localStorage value, then flat)
         const savedEQ = meta?.eq ?? loadEQFromStorage();
@@ -343,7 +412,17 @@ function createPlayerStore() {
       update((s) => ({ ...s, isPlaying: true }));
       startABCheck();
       _isPlaying = true;
-      void requestWakeLock();
+      syncWakeLock();
+      // Always (re-)set Media Session metadata so the notification appears immediately.
+      // Metadata may have been cleared by the OS while the app was in background.
+      if (_currentTrackMeta) {
+        setMediaSessionMetadata(
+          _currentTrackMeta.title,
+          _currentTrackMeta.artist,
+          _currentTrackMeta.album,
+          _currentTrackMeta.coverArt,
+        );
+      }
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'playing';
       }
@@ -353,7 +432,7 @@ function createPlayerStore() {
       engine.pause();
       update((s) => ({ ...s, isPlaying: false }));
       _isPlaying = false;
-      releaseWakeLock();
+      syncWakeLock();
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'paused';
       }
@@ -373,7 +452,7 @@ function createPlayerStore() {
       update((s) => ({ ...s, isPlaying: false, currentTime: 0 }));
       stopABCheck();
       _isPlaying = false;
-      releaseWakeLock();
+      syncWakeLock();
       if ('mediaSession' in navigator) {
         navigator.mediaSession.playbackState = 'paused';
       }

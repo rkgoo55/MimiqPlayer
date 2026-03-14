@@ -111,6 +111,8 @@ export interface AppSettings {
   defaultSpeed: number;
   defaultPitch: number; // semitones
   stemModel: StemModelId;
+  /** Keep the screen awake even when not playing */
+  keepAwake: boolean;
 }
 
 /** Player state */
@@ -161,4 +163,5 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultSpeed: 1.0,
   defaultPitch: 0,
   stemModel: 'htdemucs-6s',
+  keepAwake: false,
 };

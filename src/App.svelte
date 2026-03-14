@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { get } from 'svelte/store';
   import { trackStore } from './lib/stores/trackStore';
+  import { playerStore } from './lib/stores/playerStore';
   import FileUpload from './lib/components/FileUpload.svelte';
   import TrackList from './lib/components/TrackList.svelte';
   import Player from './lib/components/Player.svelte';
@@ -9,10 +11,20 @@
 
   let showTrackList = $state(true);
 
-  onMount(() => {
-    trackStore.load();
-    // Pre-load worker + Essentia WASM so analysis is ready when a track is selected
+  onMount(async () => {
+    await trackStore.load();
     warmupAudioAnalysisWorker();
+
+    // Restore the previously selected track from the URL hash
+    const hash = window.location.hash.slice(1); // strip leading '#'
+    if (hash) {
+      const tracks = get(trackStore);
+      const match = tracks.find((t) => t.id === hash);
+      if (match) {
+        trackStore.select(match.id);
+        await playerStore.loadTrack(match.id);
+      }
+    }
   });
 
   // Auto-hide track list when a track is selected (mobile)

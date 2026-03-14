@@ -7,7 +7,7 @@
 
   let isOpen = $state(false);
   let storage = $state({ usedMB: 0, quotaMB: 0, ratio: 0 });
-  let settings: AppSettings = $state({ skipDuration: 5, defaultSpeed: 1, defaultPitch: 0, stemModel: 'htdemucs-4s' });
+  let settings: AppSettings = $state({ skipDuration: 5, defaultSpeed: 1, defaultPitch: 0, stemModel: 'htdemucs-4s', keepAwake: false });
   const baseUrl = import.meta.env.BASE_URL;
 
   settingsStore.subscribe((v) => (settings = v));

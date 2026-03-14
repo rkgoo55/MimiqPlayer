@@ -374,10 +374,15 @@ export class AudioEngine {
     this.analyserNode = ctx.createAnalyser();
     this.analyserNode.fftSize = 2048;
 
-    // Shared tail: gainNode → eqFilters[0..9] → analyser → destination
-    this.gainNode.connect(this.eqFilters[0]);
+    // Shared tail: eqFilters[last] → analyser → destination
     this.eqFilters[this.eqFilters.length - 1].connect(this.analyserNode);
     this.analyserNode.connect(ctx.destination);
+
+    // Register SoundTouch worklet once (needed in both modes for pitch)
+    if (!this.workletRegistered) {
+      await SoundTouchNode.register(ctx, processorUrl);
+      this.workletRegistered = true;
+    }
 
     const duration = this._duration > 0 ? this._duration : 0;
     const startOffset = Math.max(0, Math.min(duration, startPercentage * duration));
@@ -386,7 +391,7 @@ export class AudioEngine {
     this._savedTime = startOffset;
 
     if (this.hasStemAudio) {
-      // ── Stem mode: N sources → N individual gains → shared gainNode ───────
+      // ── Stem mode: N sources → N individual gains → gainNode → soundTouch → eq ──
       this._stemGains.clear();
       this._stemSources = [];
 
@@ -420,13 +425,16 @@ export class AudioEngine {
         }
         src.start(0, startOffset);
       }
+
+      // Insert SoundTouch after gainNode for pitch shifting.
+      // Speed is handled by source.playbackRate so ST playbackRate stays 1.0.
+      this.soundTouchNode = new SoundTouchNode(ctx);
+      this.soundTouchNode.pitchSemitones.value = this._pitch;
+      this.soundTouchNode.playbackRate.value = 1.0;
+      this.gainNode.connect(this.soundTouchNode);
+      this.soundTouchNode.connect(this.eqFilters[0]);
     } else {
       // ── Normal mode: source → soundTouch → gain → eq → analyser ───────────
-      if (!this.workletRegistered) {
-        await SoundTouchNode.register(ctx, processorUrl);
-        this.workletRegistered = true;
-      }
-
       this.sourceNode = ctx.createBufferSource();
       this.sourceNode.buffer = this.audioBuffer!;
       this.sourceNode.playbackRate.value = this._speed;
@@ -438,6 +446,7 @@ export class AudioEngine {
       // Connect: source → soundtouch → gain → eq[0..9] → analyser → destination
       this.sourceNode.connect(this.soundTouchNode);
       this.soundTouchNode.connect(this.gainNode);
+      this.gainNode.connect(this.eqFilters[0]);
 
       this.sourceNode.onended = () => {
         if (!this._isPlaying) return;
