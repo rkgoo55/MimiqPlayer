@@ -39,7 +39,7 @@
   const isFlat = $derived(eq.every((g) => g === 0));
 </script>
 
-<div class="bg-surface-light rounded-lg p-3 space-y-3">
+<div class="bg-surface-light p-3 space-y-3">
   <div class="flex items-center justify-between">
     <span class="text-xs text-text-muted font-medium">10バンドEQ</span>
     <div class="flex items-center gap-2">

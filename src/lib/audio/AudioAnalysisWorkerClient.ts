@@ -6,6 +6,11 @@ export interface WorkerAnalyzeResult {
   chords: ChordInfo[];
 }
 
+export interface StructureSegment {
+  start: number; // seconds
+  end: number;   // seconds
+}
+
 type PendingRequest =
   | {
       kind: 'warmup';
@@ -15,6 +20,11 @@ type PendingRequest =
   | {
       kind: 'analyze';
       resolve: (value: WorkerAnalyzeResult) => void;
+      reject: (reason?: unknown) => void;
+    }
+  | {
+      kind: 'analyze_structure';
+      resolve: (value: StructureSegment[]) => void;
       reject: (reason?: unknown) => void;
     };
 
@@ -32,6 +42,7 @@ function ensureWorker(): Worker {
   worker.onmessage = (event: MessageEvent) => {
     const data = event.data as
       | { id: number; type: 'result'; payload: WorkerAnalyzeResult }
+      | { id: number; type: 'structure_result'; payload: { segments: StructureSegment[] } }
       | { id: number; type: 'ok' }
       | { id: number; type: 'error'; error: string };
 
@@ -50,6 +61,15 @@ function ensureWorker(): Worker {
         request.resolve();
       } else {
         request.reject(new Error('Unexpected warmup response for analyze request'));
+      }
+      return;
+    }
+
+    if (data.type === 'structure_result') {
+      if (request.kind === 'analyze_structure') {
+        request.resolve(data.payload.segments);
+      } else {
+        request.reject(new Error('Unexpected structure_result'));
       }
       return;
     }
@@ -126,6 +146,26 @@ export async function analyzeAudioInWorker(
           sampleRate: audioBuffer.sampleRate,
           minHoldSeconds,
         },
+      },
+      [mono.buffer]
+    );
+  });
+}
+
+export async function analyzeStructureInWorker(
+  audioBuffer: AudioBuffer
+): Promise<StructureSegment[]> {
+  const w = ensureWorker();
+  const mono = audioBufferToMonoFloat32(audioBuffer);
+  const id = nextId++;
+
+  return new Promise<StructureSegment[]>((resolve, reject) => {
+    pending.set(id, { kind: 'analyze_structure', resolve, reject });
+    w.postMessage(
+      {
+        id,
+        type: 'analyze_structure',
+        payload: { mono, sampleRate: audioBuffer.sampleRate },
       },
       [mono.buffer]
     );

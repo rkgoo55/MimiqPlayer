@@ -2,6 +2,8 @@
   import { playerStore } from '../stores/playerStore';
   import type { PlayerState } from '../types';
 
+  let { bare = false }: { bare?: boolean } = $props();
+
   let ps: PlayerState = $state({
     trackId: null,
     isPlaying: false,
@@ -25,7 +27,7 @@
   const { abRepeat } = $derived(ps);
 </script>
 
-<div class="bg-surface-light rounded-lg p-3">
+<div class="{bare ? '' : 'bg-surface-light rounded-lg p-3'}">
   <div class="flex items-center justify-between mb-3">
     <span class="text-xs text-text-muted font-medium">A-Bリピート</span>
     <button

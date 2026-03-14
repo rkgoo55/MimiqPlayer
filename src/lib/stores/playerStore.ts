@@ -4,7 +4,7 @@ import { EQ_FLAT } from '../types';
 import { AudioEngine } from '../audio/AudioEngine';
 import { getAudioFile, getTrackMeta, saveTrackMeta } from '../storage/db';
 import { extractWaveformData } from '../audio/WaveformAnalyzer';
-import { analyzeAudioInWorker } from '../audio/AudioAnalysisWorkerClient.js';
+import { analyzeAudioInWorker, analyzeStructureInWorker } from '../audio/AudioAnalysisWorkerClient.js';
 import { ANALYSIS_CACHE_VERSION } from '../audio/analysisConfig.js';
 import { decodeWavStereo16 } from '../audio/wavUtils';
 import type { WaveformData } from '../types';
@@ -37,6 +37,9 @@ function saveEQToStorage(bands: EQBands): void {
 const engine = new AudioEngine();
 // Apply saved EQ on startup
 engine.setEQ(loadEQFromStorage());
+
+/** Most recently loaded AudioBuffer — used for structure analysis */
+let _currentAudioBuffer: AudioBuffer | null = null;
 
 /** Active Wake Lock sentinel — prevents screen sleep during playback */
 let wakeLock: WakeLockSentinel | null = null;
@@ -134,6 +137,7 @@ function createPlayerStore() {
       if (!file) return;
 
       const audioBuffer = await engine.loadAudio(file.data);
+      _currentAudioBuffer = audioBuffer;
       const waveformData = extractWaveformData(audioBuffer);
       waveform.set(waveformData);
 
@@ -393,6 +397,34 @@ function createPlayerStore() {
       }
     },
 
+    /**
+     * Analyse the current track's structure (SSM + Foote novelty on HPCP)
+     * and create loop bookmarks for each detected section.
+     * Existing auto-generated bookmarks (id prefix "auto-") are replaced;
+     * manually saved bookmarks are kept.
+     */
+    async autoBookmarks(): Promise<void> {
+      const state = get({ subscribe });
+      if (!state.trackId || !_currentAudioBuffer) return;
+
+      const segments = await analyzeStructureInWorker(_currentAudioBuffer);
+
+      const AUTO_PREFIX = 'auto-';
+      const manual = get(bookmarks).filter((b) => !b.id.startsWith(AUTO_PREFIX));
+      const generated: LoopBookmark[] = segments.map((seg, i) => ({
+        id: `${AUTO_PREFIX}${seg.start.toFixed(2)}`,
+        label: `セクション ${i + 1}`,
+        a: seg.start,
+        b: seg.end,
+      }));
+
+      const next = [...manual, ...generated];
+      bookmarks.set(next);
+
+      const meta = await getTrackMeta(state.trackId);
+      if (meta) await saveTrackMeta({ ...meta, bookmarks: next });
+    },
+
     async updateBookmark(id: string, label: string, useCurrentAB: boolean) {
       const state = get({ subscribe });
       const current = get(bookmarks);
@@ -418,6 +450,17 @@ function createPlayerStore() {
         abRepeat: { enabled: true, a: bookmark.a, b: bookmark.b },
       }));
       engine.seek(bookmark.a);
+    },
+
+    async reorderBookmarks(next: LoopBookmark[]) {
+      // Strip Svelte 5 reactive Proxy wrappers before writing to IDB
+      const plain: LoopBookmark[] = next.map(({ id, label, a, b }) => ({ id, label, a, b }));
+      bookmarks.set(plain);
+      const state = get({ subscribe });
+      if (state.trackId) {
+        const meta = await getTrackMeta(state.trackId);
+        if (meta) await saveTrackMeta({ ...meta, bookmarks: plain });
+      }
     },
 
     // A-B Repeat

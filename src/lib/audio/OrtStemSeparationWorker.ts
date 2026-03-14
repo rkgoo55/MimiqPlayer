@@ -184,12 +184,32 @@ let lastModelCacheKey: string | null = null;
 let detectedBackend: 'webgpu' | 'wasm' = 'wasm';
 /** Last cache key seen from a 'separate' message — used by check_model_cached */
 let knownCacheKey: string = DEFAULT_MODEL_CACHE_KEY;
+/**
+ * Latched to true after any WebGPU device-lost / OrtRun failure.
+ * Once set, all subsequent sessions in this worker use WASM only.
+ * This prevents an endless crash loop on mobile where the GPU adapter is
+ * still queryable after the device is invalidated.
+ */
+let webgpuFailed = false;
+
+/**
+ * Returns true when the error looks like a WebGPU device-lost or
+ * buffer-map failure from ONNX Runtime's WebGPU provider.
+ * These are common on iOS/Android when the GPU is under pressure or the
+ * page is backgrounded mid-inference.
+ */
+function isWebGpuError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /OrtRun|GPUBuffer|mapAsync|MapAsyncStatus|external Instance/i.test(msg);
+}
 
 /**
  * Probe WebGPU availability before session creation so we can report the
  * backend to the UI immediately.  ORT itself handles the actual EP fallback.
  */
 async function probeWebGpu(): Promise<boolean> {
+  // Once WebGPU has crashed in this worker, never attempt it again.
+  if (webgpuFailed) return false;
   if (typeof navigator === 'undefined' || !('gpu' in navigator)) return false;
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -429,18 +449,49 @@ self.addEventListener('message', async (event: MessageEvent<WorkerInMessage>) =>
     self.postMessage({ type: 'processing', id, progress: 5 } satisfies WorkerOutMessage);
 
     // 3. Run overlap-add inference
-    const channels = await runOlaInference(
-      session,
-      left,
-      right,
-      chunkSamples,
-      stemCount,
-      (chunkPct) => {
-        // Map chunk progress (0-100) into overall progress (5-95)
-        const overall = 5 + Math.round(chunkPct * 0.9);
-        self.postMessage({ type: 'processing', id, progress: overall } satisfies WorkerOutMessage);
-      },
-    );
+    //    Inner try/catch: if WebGPU crashes mid-inference (device lost, buffer
+    //    map failure, etc.) we transparently retry with a fresh WASM-only
+    //    session so the user never sees the error on mobile.
+    let channels: Float32Array[];
+    try {
+      channels = await runOlaInference(
+        session,
+        left,
+        right,
+        chunkSamples,
+        stemCount,
+        (chunkPct) => {
+          const overall = 5 + Math.round(chunkPct * 0.9);
+          self.postMessage({ type: 'processing', id, progress: overall } satisfies WorkerOutMessage);
+        },
+      );
+    } catch (runErr) {
+      if (!isWebGpuError(runErr)) throw runErr; // not a WebGPU error — surface it
+
+      // Permanently disable WebGPU for this worker instance and retry with WASM.
+      webgpuFailed = true;
+      sessionPromise = null;
+      lastModelCacheKey = null;
+      detectedBackend = 'wasm';
+
+      const wasmSession = await ort.InferenceSession.create(modelData, {
+        executionProviders: ['wasm'],
+      });
+      self.postMessage({ type: 'backend_info', backend: 'wasm' } satisfies WorkerOutMessage);
+      self.postMessage({ type: 'processing', id, progress: 5 } satisfies WorkerOutMessage);
+
+      channels = await runOlaInference(
+        wasmSession,
+        left,
+        right,
+        chunkSamples,
+        stemCount,
+        (chunkPct) => {
+          const overall = 5 + Math.round(chunkPct * 0.9);
+          self.postMessage({ type: 'processing', id, progress: overall } satisfies WorkerOutMessage);
+        },
+      );
+    }
 
     self.postMessage({ type: 'processing', id, progress: 95 } satisfies WorkerOutMessage);
 
@@ -462,11 +513,14 @@ self.addEventListener('message', async (event: MessageEvent<WorkerInMessage>) =>
       transfers,
     );
   } catch (err) {
-    // If WebGPU session creation fails, clear the cached session so next
-    // call retries (possibly falling back to WASM only).
-    if (sessionPromise) {
-      sessionPromise = null;
-      lastModelCacheKey = null;
+    // Clear cached session so the next call starts fresh.
+    sessionPromise = null;
+    lastModelCacheKey = null;
+    // If this was a WebGPU failure (e.g. during session creation), latch the
+    // flag so subsequent calls never request the WebGPU EP again.
+    if (isWebGpuError(err)) {
+      webgpuFailed = true;
+      detectedBackend = 'wasm';
     }
     self.postMessage({
       type: 'error',

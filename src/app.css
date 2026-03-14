@@ -23,13 +23,11 @@ html, body {
 }
 
 ::-webkit-scrollbar {
-  width: 6px;
+  display: none;
 }
-::-webkit-scrollbar-track {
-  @apply bg-surface;
-}
-::-webkit-scrollbar-thumb {
-  @apply bg-surface-lighter rounded-full;
+
+* {
+  scrollbar-width: none;
 }
 
 input[type="range"] {

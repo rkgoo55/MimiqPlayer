@@ -2,6 +2,8 @@
   import { playerStore } from '../stores/playerStore';
   import type { PlayerState, LoopBookmark } from '../types';
 
+  let { bare = false, isAdding = $bindable(false) }: { bare?: boolean; isAdding?: boolean } = $props();
+
   let ps: PlayerState = $state({
     trackId: null, isPlaying: false, currentTime: 0, duration: 0,
     speed: 1, pitch: 0, volume: 1,
@@ -9,13 +11,90 @@
   });
   let bookmarks: LoopBookmark[] = $state([]);
   let savingLabel = $state('');
-  let isAdding = $state(false);
+  let isAnalyzing = $state(false);
   /** ID of the bookmark currently being edited, or null */
   let editingId = $state<string | null>(null);
   let editingLabel = $state('');
 
+  let dragFromIndex = $state<number | null>(null);
+  let dragOverIndex = $state<number | null>(null);
+
   playerStore.subscribe((v) => (ps = v));
   playerStore.bookmarks.subscribe((v) => (bookmarks = v));
+
+  function onDragStart(i: number) {
+    dragFromIndex = i;
+  }
+
+  function onDragOver(e: DragEvent, i: number) {
+    e.preventDefault();
+    dragOverIndex = i;
+  }
+
+  function applyReorder(from: number, to: number) {
+    if (from === to) return;
+    const reordered = [...bookmarks];
+    const [item] = reordered.splice(from, 1);
+    reordered.splice(to, 0, item);
+    void playerStore.reorderBookmarks(reordered);
+  }
+
+  function onDrop(i: number) {
+    if (dragFromIndex === null || dragFromIndex === i) {
+      dragFromIndex = null;
+      dragOverIndex = null;
+      return;
+    }
+    applyReorder(dragFromIndex, i);
+    dragFromIndex = null;
+    dragOverIndex = null;
+  }
+
+  function onDragEnd() {
+    dragFromIndex = null;
+    dragOverIndex = null;
+  }
+
+  // ---- Touch drag (mobile) ----
+  function indexFromPoint(x: number, y: number): number | null {
+    const el = document.elementFromPoint(x, y);
+    if (!el) return null;
+    let target: Element | null = el;
+    while (target) {
+      const idx = target.getAttribute('data-bm-index');
+      if (idx !== null) return parseInt(idx, 10);
+      target = target.parentElement;
+    }
+    return null;
+  }
+
+  function onTouchStart(e: TouchEvent, i: number) {
+    dragFromIndex = i;
+  }
+
+  function onTouchMove(e: TouchEvent) {
+    if (dragFromIndex === null) return;
+    e.preventDefault();
+    const t = e.touches[0];
+    const idx = indexFromPoint(t.clientX, t.clientY);
+    if (idx !== null) dragOverIndex = idx;
+  }
+
+  function onTouchEnd() {
+    if (dragFromIndex !== null && dragOverIndex !== null && dragFromIndex !== dragOverIndex) {
+      applyReorder(dragFromIndex, dragOverIndex);
+    }
+    dragFromIndex = null;
+    dragOverIndex = null;
+  }
+
+  // listEl は touchmove を passive:false で登録するために使用
+  let listEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (!listEl) return;
+    listEl.addEventListener('touchmove', onTouchMove, { passive: false });
+    return () => listEl?.removeEventListener('touchmove', onTouchMove);
+  });
 
   function formatTime(sec: number): string {
     const m = Math.floor(sec / 60);
@@ -24,6 +103,16 @@
   }
 
   const canSave = $derived(ps.abRepeat.a !== null && ps.abRepeat.b !== null);
+
+  async function handleAutoBookmarks() {
+    if (isAnalyzing || !ps.trackId) return;
+    isAnalyzing = true;
+    try {
+      await playerStore.autoBookmarks();
+    } finally {
+      isAnalyzing = false;
+    }
+  }
 
   async function handleSave() {
     if (!canSave) return;
@@ -49,21 +138,46 @@
   }
 </script>
 
-{#if bookmarks.length > 0 || canSave}
-  <div class="bg-surface-light rounded-lg p-3 space-y-2">
-    <div class="flex items-center justify-between">
-      <span class="text-xs text-text-muted font-medium">ループブックマーク</span>
-      {#if canSave && !isAdding && editingId === null}
-        <button
-          class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
-          onclick={() => (isAdding = true)}
-        >
-          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          現在のA-Bを保存
-        </button>
+{#if bookmarks.length > 0 || canSave || ps.trackId}
+  <div class="{bare ? '' : 'bg-surface-light rounded-lg p-3'} space-y-2">
+    <div class="flex items-center justify-between gap-1">
+      {#if !bare}
+        <span class="text-xs text-text-muted font-medium">ループブックマーク</span>
       {/if}
+      <div class="flex items-center {bare ? 'w-full justify-end' : ''} gap-1">
+        <!-- セクション自動検出 (ブックマークがない時のみ表示) -->
+        {#if ps.trackId && bookmarks.length === 0 && !isAdding && editingId === null}
+          <button
+            class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onclick={handleAutoBookmarks}
+            disabled={isAnalyzing}
+            title="楽曲構造を解析してセクションを自動ブックマーク"
+          >
+            {#if isAnalyzing}
+              <svg class="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+              </svg>
+              解析中…
+            {:else}
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+              </svg>
+              自動検出
+            {/if}
+          </button>
+        {/if}
+        {#if !bare && canSave && !isAdding && editingId === null}
+          <button
+            class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
+            onclick={() => (isAdding = true)}
+          >
+            <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            現在のA-Bを保存
+          </button>
+        {/if}
+      </div>
     </div>
 
     <!-- Save input -->
@@ -91,12 +205,37 @@
 
     <!-- Bookmark list -->
     {#if bookmarks.length > 0}
-      <div class="space-y-1">
-        {#each bookmarks as bm (bm.id)}
+      <div class="space-y-1" bind:this={listEl}>
+        {#each bookmarks as bm, i (bm.id)}
           {@const isActive = ps.abRepeat.a === bm.a && ps.abRepeat.b === bm.b}
           {@const isEditing = editingId === bm.id}
-          <div class="space-y-1">
+          {@const isDragOver = dragOverIndex === i && dragFromIndex !== i}
+          <div
+            class="space-y-1 transition-opacity {dragFromIndex === i ? 'opacity-40' : 'opacity-100'}"
+            data-bm-index={i}
+            draggable="true"
+            ondragstart={() => onDragStart(i)}
+            ondragover={(e) => onDragOver(e, i)}
+            ondrop={() => onDrop(i)}
+            ondragend={onDragEnd}
+          >
+            <!-- drop indicator -->
+            {#if isDragOver && dragFromIndex !== null && dragFromIndex > i}
+              <div class="h-0.5 rounded bg-primary/60 mx-1"></div>
+            {/if}
             <div class="flex items-center gap-2">
+              <!-- drag handle (mouse + touch) -->
+              <span
+                class="flex-shrink-0 cursor-grab active:cursor-grabbing text-text-muted/30 hover:text-text-muted/60 select-none"
+                ontouchstart={(e) => onTouchStart(e, i)}
+                ontouchend={onTouchEnd}
+              >
+                <svg class="w-4 h-5 pointer-events-none" viewBox="0 0 8 14" fill="currentColor">
+                  <circle cx="2" cy="2" r="1.2"/><circle cx="6" cy="2" r="1.2"/>
+                  <circle cx="2" cy="7" r="1.2"/><circle cx="6" cy="7" r="1.2"/>
+                  <circle cx="2" cy="12" r="1.2"/><circle cx="6" cy="12" r="1.2"/>
+                </svg>
+              </span>
               <button
                 class="flex-1 flex items-center justify-between px-2.5 py-1.5 rounded text-xs transition-colors
                   {isEditing ? 'bg-primary/10 text-primary ring-1 ring-primary/30' : isActive ? 'bg-primary/20 text-primary' : 'bg-surface-lighter hover:bg-surface-lighter/80 text-text'}"
@@ -140,6 +279,11 @@
               </button>
             </div>
 
+            <!-- drop indicator (below) -->
+            {#if isDragOver && dragFromIndex !== null && dragFromIndex < i}
+              <div class="h-0.5 rounded bg-primary/60 mx-1"></div>
+            {/if}
+
             <!-- Edit panel (inline) -->
             {#if isEditing}
               <div class="pl-0 space-y-1.5 rounded-lg bg-surface p-2.5">
@@ -156,7 +300,7 @@
                     class="w-full px-2 py-1.5 text-xs rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
                     onclick={() => handleUpdate(bm.id, true)}
                     title="現在の A-B と名前で上書き"
-                  >現在のA-Bで上書き保存</button>
+                  >ブックマークに保存</button>
                 {:else}
                   <button
                     class="w-full px-2 py-1.5 text-xs rounded bg-surface-lighter text-text-muted hover:bg-surface-lighter/80 transition-colors"

@@ -22,8 +22,12 @@
     abRepeat: { enabled: false, a: null, b: null },
   });
   let showPlaySettings = $state(false);
+  let showBookmarks = $state(false);
+  let bookmarksIsAdding = $state(false);
   let showEQ = $state(false);
   let showStems = $state(false);
+
+  const canSaveAB = $derived(ps.abRepeat.a !== null && ps.abRepeat.b !== null);
   let eq: EQBands = $state([...EQ_FLAT]);
 
   selectedTrack.subscribe((v) => (track = v));
@@ -114,9 +118,9 @@
     <Controls />
 
     <!-- Speed & Pitch (collapsible) -->
-    <div>
+    <div class="rounded-lg overflow-hidden">
       <button
-        class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors
+        class="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors
           {showPlaySettings
             ? 'bg-primary/15 text-primary'
             : isModified
@@ -142,7 +146,7 @@
         </svg>
       </button>
       {#if showPlaySettings}
-        <div class="mt-2 space-y-2">
+        <div class="p-2 space-y-2 bg-surface-light">
           <SpeedPitch />
           <!-- Skip duration -->
           <div class="bg-surface-light rounded-lg p-3">
@@ -166,73 +170,109 @@
       {/if}
     </div>
 
-    <!-- A-B Repeat -->
-    <ABRepeat />
-
-    <!-- Loop Bookmarks -->
-    <LoopBookmarks />
-
-    <!-- EQ toggle button -->
-    <button
-      class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors
-        {showEQ
-          ? 'bg-primary/15 text-primary'
-          : isEQModified
-            ? 'bg-surface-lighter text-text'
-            : 'bg-surface-light text-text-muted hover:bg-surface-lighter hover:text-text'}"
-      onclick={() => (showEQ = !showEQ)}
-    >
-      <span class="flex items-center gap-2">
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h4m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h10M3 12h10m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h4M3 17h4m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h10" />
-        </svg>
-        <span>EQ</span>
-        {#if isEQModified}
-          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary leading-none">変更中</span>
+    <!-- A-B Repeat + Loop Bookmarks (combined box) -->
+    <div class="bg-surface-light rounded-lg p-3 space-y-0">
+      <ABRepeat bare />
+      <div class="border-t border-white/5 mt-3 pt-2">
+        <div class="flex items-center justify-between">
+          <button
+            class="flex items-center gap-1.5 text-xs transition-colors
+              {showBookmarks ? 'text-primary' : 'text-text-muted hover:text-text'}"
+            onclick={() => (showBookmarks = !showBookmarks)}
+          >
+            <span class="font-medium">ループブックマーク</span>
+            <svg
+              class="w-3.5 h-3.5 transition-transform duration-200 {showBookmarks ? 'rotate-180' : ''}"
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+            </svg>
+          </button>
+          {#if canSaveAB && !bookmarksIsAdding}
+            <button
+              class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
+              onclick={() => { showBookmarks = true; bookmarksIsAdding = true; }}
+            >
+              <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+              保存
+            </button>
+          {/if}
+        </div>
+        {#if showBookmarks}
+          <div class="mt-2">
+            <LoopBookmarks bare bind:isAdding={bookmarksIsAdding} />
+          </div>
         {/if}
-      </span>
-      <svg
-        class="w-4 h-4 transition-transform duration-200 {showEQ ? 'rotate-180' : ''}"
-        fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
-      >
-        <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
-      </svg>
-    </button>
-    {#if showEQ}
-      <EQPanel />
-    {/if}
+      </div>
+    </div>
 
-    <!-- Stem Mixer toggle button -->
-    <button
-      class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors
-        {showStems
-          ? 'bg-primary/15 text-primary'
-          : isStemsActive
-            ? 'bg-surface-lighter text-text'
-            : 'bg-surface-light text-text-muted hover:bg-surface-lighter hover:text-text'}"
-      onclick={() => (showStems = !showStems)}
-    >
-      <span class="flex items-center gap-2">
-        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
-        </svg>
-        <span>ステムミキサー</span>
-        {#if stemState.status === 'ready'}
-          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary leading-none">分離済み</span>
-        {:else if stemState.status === 'processing'}
-          <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 leading-none">処理中</span>
-        {/if}
-      </span>
-      <svg
-        class="w-4 h-4 transition-transform duration-200 {showStems ? 'rotate-180' : ''}"
-        fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+    <!-- EQ -->
+    <div class="rounded-lg overflow-hidden">
+      <button
+        class="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors
+          {showEQ
+            ? 'bg-primary/15 text-primary'
+            : isEQModified
+              ? 'bg-surface-lighter text-text'
+              : 'bg-surface-light text-text-muted hover:bg-surface-lighter hover:text-text'}"
+        onclick={() => (showEQ = !showEQ)}
       >
-        <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
-      </svg>
-    </button>
-    {#if showStems}
-      <StemMixer />
-    {/if}
+        <span class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h4m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h10M3 12h10m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h4M3 17h4m0 0a2 2 0 1 0 4 0m-4 0a2 2 0 1 1 4 0m0 0h10" />
+          </svg>
+          <span>EQ</span>
+          {#if isEQModified}
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary leading-none">変更中</span>
+          {/if}
+        </span>
+        <svg
+          class="w-4 h-4 transition-transform duration-200 {showEQ ? 'rotate-180' : ''}"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+        </svg>
+      </button>
+      {#if showEQ}
+        <EQPanel />
+      {/if}
+    </div>
+
+    <!-- Stem Mixer -->
+    <div class="rounded-lg overflow-hidden">
+      <button
+        class="w-full flex items-center justify-between px-3 py-2 text-sm transition-colors
+          {showStems
+            ? 'bg-primary/15 text-primary'
+            : isStemsActive
+              ? 'bg-surface-lighter text-text'
+              : 'bg-surface-light text-text-muted hover:bg-surface-lighter hover:text-text'}"
+        onclick={() => (showStems = !showStems)}
+      >
+        <span class="flex items-center gap-2">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25H12" />
+          </svg>
+          <span>ステムミキサー</span>
+          {#if stemState.status === 'ready'}
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/20 text-primary leading-none">分離済み</span>
+          {:else if stemState.status === 'processing'}
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 leading-none">処理中</span>
+          {/if}
+        </span>
+        <svg
+          class="w-4 h-4 transition-transform duration-200 {showStems ? 'rotate-180' : ''}"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"
+        >
+          <path stroke-linecap="round" stroke-linejoin="round" d="m19 9-7 7-7-7" />
+        </svg>
+      </button>
+      {#if showStems}
+        <StemMixer />
+      {/if}
+    </div>
 
     <!-- Analysis info: BPM + Chords (β) -->
     <ChordDisplay />

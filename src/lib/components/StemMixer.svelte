@@ -124,7 +124,7 @@
   };
 </script>
 
-<div class="bg-surface-light rounded-lg p-3 space-y-3">
+<div class="bg-surface-light p-3 space-y-3">
   {#if stemState.status === 'none' || stemState.status === 'error'}
     <!-- Separate button -->
     <div class="space-y-2">
