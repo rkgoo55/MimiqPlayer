@@ -54,7 +54,7 @@ function ortAssetsDevPlugin(): Plugin {
       server.middlewares.use((req, res, next) => {
         const url = req.url ?? ''
         // Strip base path prefix and query string
-        const bare = url.replace(/^\/?MimiqPlayer\//, '').split('?')[0]
+        const bare = url.replace(/^\//, '').split('?')[0]
         const ext  = path.extname(bare)
         if (bare.startsWith('ort-') && ext in MIME) {
           const file = path.join(ortDist, bare)
@@ -90,7 +90,7 @@ export default defineConfig({
       ],
     }),
   ],
-  base: '/MimiqPlayer/',
+  base: '/',
   optimizeDeps: {
     // Prevent Vite from pre-bundling onnxruntime-web; it ships its own ESM
     // entry points and dynamic WASM loading that Vite's bundler would break.

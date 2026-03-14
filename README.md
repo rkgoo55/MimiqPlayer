@@ -4,6 +4,8 @@
 
 # MimiqPlayer - 耳コピ支援ツール
 
+**[https://mimiq-player.rkgoo55.net/](https://mimiq-player.rkgoo55.net/)**
+
 ブラウザ上で動作する耳コピ（音楽の聴き取り）支援 Web アプリである。
 
 ローカル音源を読み込み、速度・ピッチ変更や A-B リピートなどの再生機能を提供する。
@@ -78,7 +80,3 @@ IndexedDB
 
 - アプリ起動時に Essentia WASM をウォームアップして、初回解析の待ち時間を短縮する
 - ステム分離は WebGPU を優先し、非対応環境は WASM へ自動フォールバックする
-
-## デプロイ
-
-`main` ブランチへの push 時に GitHub Pages へ自動デプロイされる。
