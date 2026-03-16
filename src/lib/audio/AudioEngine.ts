@@ -1,5 +1,4 @@
-import { SoundTouchNode } from '@soundtouchjs/audio-worklet';
-import processorUrl from '@soundtouchjs/audio-worklet/processor?url';
+import { PitchShifter } from 'soundtouchjs';
 import type { EQBands, StemType, StemVolumes } from '../types';
 import { EQ_FLAT, DEFAULT_STEM_VOLUMES } from '../types';
 
@@ -15,17 +14,15 @@ const EQ_FREQUENCIES = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 export class AudioEngine {
   private audioContext: AudioContext | null = null;
   private audioBuffer: AudioBuffer | null = null;
-  private sourceNode: AudioBufferSourceNode | null = null;
-  private soundTouchNode: SoundTouchNode | null = null;
+  private pitchShifter: PitchShifter | null = null;
   private gainNode: GainNode | null = null;
   private eqFilters: BiquadFilterNode[] = [];
   private analyserNode: AnalyserNode | null = null;
-  private workletRegistered = false;
 
   // ─── Stem audio ────────────────────────────────────────────────────────────
   private _stemBuffers = new Map<StemType, AudioBuffer>();
-  private _stemSources: AudioBufferSourceNode[] = [];
   private _stemGains = new Map<StemType, GainNode>();
+  private _stemPitchShifters: Array<{ stem: StemType; shifter: PitchShifter }> = [];
   private _stemVolumes: StemVolumes = { ...DEFAULT_STEM_VOLUMES };
 
   private _isPlaying = false;
@@ -35,12 +32,11 @@ export class AudioEngine {
   private _volume = 1.0;
   private _eq: EQBands = [...EQ_FLAT];
   private _savedTime = 0; // saved position for pause/resume
-  private playbackStartedAt = 0;
-  private playbackStartedOffset = 0;
 
   private animFrameId: number | null = null;
   private onTimeUpdate: AudioEngineCallback | null = null;
   private onEnded: (() => void) | null = null;
+  private _onError: ((err: Error) => void) | null = null;
 
   get isPlaying(): boolean {
     return this._isPlaying;
@@ -49,9 +45,15 @@ export class AudioEngine {
     return this._duration;
   }
   get currentTime(): number {
-    if (this._isPlaying && this.audioContext) {
-      const elapsed = (this.audioContext.currentTime - this.playbackStartedAt) * this._speed;
-      return Math.max(0, Math.min(this._duration, this.playbackStartedOffset + elapsed));
+    if (this._isPlaying) {
+      if (this.pitchShifter) {
+        // Normal mode: PitchShifter tracks position internally
+        return Math.max(0, Math.min(this._duration, this.pitchShifter.timePlayed));
+      }
+      if (this._stemPitchShifters.length > 0) {
+        // Stem mode: use the first stem's timePlayed
+        return Math.max(0, Math.min(this._duration, this._stemPitchShifters[0].shifter.timePlayed));
+      }
     }
     return this._savedTime;
   }
@@ -226,32 +228,23 @@ export class AudioEngine {
   /** Set playback speed (0.25 - 2.0) */
   setSpeed(speed: number): void {
     this._speed = Math.max(0.25, Math.min(2.0, speed));
-    if (this.audioContext) {
-      if (this.hasStemAudio && this._stemSources.length > 0) {
-        const current = this.currentTime;
-        this.playbackStartedOffset = current;
-        this.playbackStartedAt = this.audioContext.currentTime;
-        for (const src of this._stemSources) {
-          src.playbackRate.value = this._speed;
-        }
-        if (this.soundTouchNode) {
-          this.soundTouchNode.playbackRate.value = this._speed;
-        }
-      } else if (this.sourceNode && this.soundTouchNode) {
-        const current = this.currentTime;
-        this.playbackStartedOffset = current;
-        this.playbackStartedAt = this.audioContext.currentTime;
-        this.sourceNode.playbackRate.value = this._speed;
-        this.soundTouchNode.playbackRate.value = this._speed;
-      }
+    if (this.pitchShifter) {
+      // Normal mode: PitchShifter tempo is pitch-preserving
+      this.pitchShifter.tempo = this._speed;
+    }
+    for (const { shifter } of this._stemPitchShifters) {
+      shifter.tempo = this._speed;
     }
   }
 
   /** Set pitch shift in semitones (-12 to +12) */
   setPitch(semitones: number): void {
     this._pitch = Math.max(-12, Math.min(12, semitones));
-    if (this.soundTouchNode) {
-      this.soundTouchNode.pitchSemitones.value = this._pitch;
+    if (this.pitchShifter) {
+      this.pitchShifter.pitchSemitones = this._pitch;
+    }
+    for (const { shifter } of this._stemPitchShifters) {
+      shifter.pitchSemitones = this._pitch;
     }
   }
 
@@ -302,20 +295,9 @@ export class AudioEngine {
   /**
    * Called when the app returns to foreground after being backgrounded.
    *
-   * Mobile browsers (iOS Safari in particular) suspend the AudioContext when
-   * the page is hidden. On resume two problems arise:
-   *   1. The context stays suspended and audio is silent.
-   *   2. SoundTouch's AudioWorklet ring-buffer accumulates stale data during
-   *      the suspension gap, producing a burst of crackle/noise when playback
-   *      resumes.
-   *
-   * This method:
-   *   - Resumes the AudioContext if it is suspended.
-   *   - For normal (SoundTouch) mode: re-seeks to the current position so
-   *     the SoundTouch pipeline is torn down and rebuilt fresh, flushing
-   *     the stale buffer.
-   *   - For stem mode: just ensures the AudioContext is running and restarts
-   *     the rAF time-tracking loop if it stopped.
+   * iOS Safari suspends the AudioContext when the page is hidden. On resume,
+   * the ScriptProcessor (PitchShifter) or AudioBufferSourceNode may have
+   * accumulated stale state. We rebuild the pipeline from the current position.
    */
   async handleForeground(): Promise<void> {
     if (!this.audioContext) return;
@@ -324,36 +306,36 @@ export class AudioEngine {
     }
     if (!this._isPlaying) return;
 
-    if (!this.hasStemAudio) {
-      // Normal mode: rebuild the SoundTouch pipeline to flush stale buffers
-      const time = this.currentTime;
-      this._isPlaying = false;
-      this._stopTimeTracking();
-      this._teardownPlaybackGraph();
-      this._savedTime = time;
-      void this._startPlayback(
-        this.audioContext,
-        this._duration > 0 ? time / this._duration : 0,
-      );
-    } else {
-      // Stem mode: rAF loop may have stopped while backgrounded; restart it
-      if (this.animFrameId === null) {
-        this._startTimeTracking();
-      }
-    }
+    const time = this.currentTime;
+    this._isPlaying = false;
+    this._stopTimeTracking();
+    this._teardownPlaybackGraph();
+    this._savedTime = time;
+    void this._startPlayback(
+      this.audioContext,
+      this._duration > 0 ? time / this._duration : 0,
+    );
   }
 
   private async _startPlayback(ctx: AudioContext, startPercentage = 0): Promise<void> {
-    if (ctx.state === 'suspended') {
-      await ctx.resume();
+    try {
+      if (ctx.state !== 'running') {
+        await ctx.resume();
+      }
+      // _setupPipeline is now synchronous — no worklet registration needed
+      this._setupPipeline(ctx, startPercentage);
+      this._isPlaying = true;
+      this._startTimeTracking();
+    } catch (err) {
+      this._isPlaying = false;
+      this._teardownPlaybackGraph();
+      const error = err instanceof Error ? err : new Error('Playback failed');
+      console.error('AudioEngine: playback start failed:', error);
+      this._onError?.(error);
     }
-
-    await this._setupPipeline(ctx, startPercentage);
-    this._isPlaying = true;
-    this._startTimeTracking();
   }
 
-  private async _setupPipeline(ctx: AudioContext, startPercentage = 0): Promise<void> {
+  private _setupPipeline(ctx: AudioContext, startPercentage = 0): void {
     this._teardownPlaybackGraph();
 
     this.gainNode = ctx.createGain();
@@ -381,119 +363,86 @@ export class AudioEngine {
     this.eqFilters[this.eqFilters.length - 1].connect(this.analyserNode);
     this.analyserNode.connect(ctx.destination);
 
-    // Register SoundTouch worklet once (needed in both modes for pitch)
-    if (!this.workletRegistered) {
-      await SoundTouchNode.register(ctx, processorUrl);
-      this.workletRegistered = true;
-    }
-
+    // Save the starting position so pause/seek can restore it before playback begins
     const duration = this._duration > 0 ? this._duration : 0;
-    const startOffset = Math.max(0, Math.min(duration, startPercentage * duration));
-    this.playbackStartedOffset = startOffset;
-    this.playbackStartedAt = ctx.currentTime;
-    this._savedTime = startOffset;
+    this._savedTime = Math.max(0, Math.min(duration, startPercentage * duration));
 
     if (this.hasStemAudio) {
-      // ── Stem mode: N sources → N individual gains → gainNode → soundTouch → eq ──
+      // ── Stem mode: PitchShifter per stem → individual gains → gainNode → EQ ──
+      // Each PitchShifter provides pitch-preserving speed and semitone pitch control.
       this._stemGains.clear();
-      this._stemSources = [];
+      this._stemPitchShifters = [];
 
-      let firstSource: AudioBufferSourceNode | null = null;
+      let isFirst = true;
       for (const [stem, buf] of this._stemBuffers) {
         if (!buf) continue;
 
-        const src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.playbackRate.value = this._speed;
+        const onEnd = isFirst
+          ? () => {
+              if (!this._isPlaying) return;
+              this._isPlaying = false;
+              this._savedTime = 0;
+              this._stopTimeTracking();
+              this._teardownPlaybackGraph();
+              this.onEnded?.();
+            }
+          : undefined;
+        isFirst = false;
+
+        const shifter = new PitchShifter(ctx, buf, 4096, onEnd);
+        shifter.tempo = this._speed;
+        shifter.pitchSemitones = this._pitch;
+        if (startPercentage > 0) {
+          // percentagePlayed setter expects 0–1 fraction
+          shifter.percentagePlayed = startPercentage;
+        }
 
         const stemGain = ctx.createGain();
         stemGain.gain.value = (this._stemVolumes as Record<string, number>)[stem] ?? 1;
 
-        src.connect(stemGain);
+        shifter.connect(stemGain);
         stemGain.connect(this.gainNode!);
 
         this._stemGains.set(stem, stemGain);
-        this._stemSources.push(src);
-
-        if (!firstSource) {
-          firstSource = src;
-          src.onended = () => {
-            if (!this._isPlaying) return;
-            this._isPlaying = false;
-            this._savedTime = 0;
-            this._stopTimeTracking();
-            this._teardownPlaybackGraph();
-            this.onEnded?.();
-          };
-        }
-        src.start(0, startOffset);
+        this._stemPitchShifters.push({ stem, shifter });
       }
-
-      // Insert SoundTouch after gainNode for pitch shifting.
-      // Speed is handled both by source.playbackRate AND soundTouchNode.playbackRate
-      // (same pattern as normal mode) so that SoundTouch can pitch-correct the
-      // tape-speed change introduced by source.playbackRate.
-      this.soundTouchNode = new SoundTouchNode(ctx);
-      this.soundTouchNode.pitchSemitones.value = this._pitch;
-      this.soundTouchNode.playbackRate.value = this._speed;
-      this.gainNode.connect(this.soundTouchNode);
-      this.soundTouchNode.connect(this.eqFilters[0]);
-    } else {
-      // ── Normal mode: source → soundTouch → gain → eq → analyser ───────────
-      this.sourceNode = ctx.createBufferSource();
-      this.sourceNode.buffer = this.audioBuffer!;
-      this.sourceNode.playbackRate.value = this._speed;
-
-      this.soundTouchNode = new SoundTouchNode(ctx);
-      this.soundTouchNode.playbackRate.value = this._speed;
-      this.soundTouchNode.pitchSemitones.value = this._pitch;
-
-      // Connect: source → soundtouch → gain → eq[0..9] → analyser → destination
-      this.sourceNode.connect(this.soundTouchNode);
-      this.soundTouchNode.connect(this.gainNode);
+      // gainNode → EQ
       this.gainNode.connect(this.eqFilters[0]);
-
-      this.sourceNode.onended = () => {
+    } else {
+      // ── Normal mode: PitchShifter (ScriptProcessorNode) → gainNode → EQ ──
+      // PitchShifter handles pitch-preserving tempo and semitone pitch shift.
+      // Uses ScriptProcessorNode — no async worklet registration needed.
+      this.pitchShifter = new PitchShifter(ctx, this.audioBuffer!, 4096, () => {
         if (!this._isPlaying) return;
         this._isPlaying = false;
         this._savedTime = 0;
         this._stopTimeTracking();
         this._teardownPlaybackGraph();
         this.onEnded?.();
-      };
-      this.sourceNode.start(0, startOffset);
+      });
+      this.pitchShifter.tempo = this._speed;
+      this.pitchShifter.pitchSemitones = this._pitch;
+      if (startPercentage > 0) {
+        // percentagePlayed setter expects 0–1 fraction (despite getter returning 0–100)
+        this.pitchShifter.percentagePlayed = startPercentage;
+      }
+      this.pitchShifter.connect(this.gainNode!);
+      this.gainNode.connect(this.eqFilters[0]);
     }
   }
 
   private _teardownPlaybackGraph(): void {
-    // Normal mode: single source node
-    if (this.sourceNode) {
-      this.sourceNode.onended = null;
-      try {
-        this.sourceNode.stop();
-      } catch {
-        // ignore stop on ended/disconnected sources
-      }
-      this.sourceNode.disconnect();
-      this.sourceNode = null;
+    // Normal mode: PitchShifter (ScriptProcessorNode)
+    if (this.pitchShifter) {
+      this.pitchShifter.disconnect();
+      this.pitchShifter = null;
     }
 
-    if (this.soundTouchNode) {
-      this.soundTouchNode.disconnect();
-      this.soundTouchNode = null;
+    // Stem mode: one PitchShifter per stem
+    for (const { shifter } of this._stemPitchShifters) {
+      shifter.disconnect();
     }
-
-    // Stem mode: multiple source nodes
-    for (const src of this._stemSources) {
-      src.onended = null;
-      try {
-        src.stop();
-      } catch {
-        /* ignore */
-      }
-      src.disconnect();
-    }
-    this._stemSources = [];
+    this._stemPitchShifters = [];
     for (const gainNode of this._stemGains.values()) {
       gainNode.disconnect();
     }

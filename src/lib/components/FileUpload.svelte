@@ -11,6 +11,17 @@
   let fileInput: HTMLInputElement;
   const MAX_FILE_BYTES = 250 * 1024 * 1024; // 250MB
 
+  // iOS Safari may return empty or non-standard MIME types for audio files
+  const AUDIO_EXTENSIONS = new Set([
+    'mp3', 'm4a', 'aac', 'ogg', 'oga', 'wav', 'flac', 'opus', 'weba', 'aiff', 'aif',
+  ]);
+
+  function isAudioFile(file: File): boolean {
+    if (file.type.startsWith('audio/')) return true;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    return AUDIO_EXTENSIONS.has(ext);
+  }
+
   function isMimiqZip(file: File): boolean {
     return (
       file.name.endsWith('.mimiqtrack.zip') ||
@@ -49,7 +60,8 @@
         }
 
         // ── Regular audio file ────────────────────────────────────────────
-        if (!file.type.startsWith('audio/')) {
+        // Use extension-based fallback because iOS Safari may return empty file.type
+        if (!isAudioFile(file)) {
           console.warn(`${file.name} は音声ファイルではありません`);
           continue;
         }

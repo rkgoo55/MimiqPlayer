@@ -1,34 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AudioEngine } from '../../audio/AudioEngine';
 
-vi.mock('@soundtouchjs/audio-worklet', () => {
-  class MockSoundTouchNode {
-    parameters = new Map([
-      ['pitch', { value: 1 }],
-      ['tempo', { value: 1 }],
-      ['rate', { value: 1 }],
-      ['pitchSemitones', { value: 0 }],
-      ['playbackRate', { value: 1 }],
-    ]);
-
-    static register = vi.fn().mockResolvedValue(undefined);
-
+vi.mock('soundtouchjs', () => {
+  class MockPitchShifter {
+    timePlayed = 0;
+    percentagePlayed = 0;
+    set tempo(_v: number) {}
+    set pitch(_v: number) {}
+    set pitchSemitones(_v: number) {}
     connect() {}
     disconnect() {}
-
-    get pitch() { return this.parameters.get('pitch'); }
-    get tempo() { return this.parameters.get('tempo'); }
-    get rate() { return this.parameters.get('rate'); }
-    get pitchSemitones() { return this.parameters.get('pitchSemitones'); }
-    get playbackRate() { return this.parameters.get('playbackRate'); }
+    on() {}
+    off() {}
+    constructor(
+      _ctx: AudioContext,
+      _buf: AudioBuffer,
+      _size: number,
+      public onEnd?: () => void,
+    ) {}
   }
-
-  return { SoundTouchNode: MockSoundTouchNode };
+  return { PitchShifter: MockPitchShifter };
 });
-
-vi.mock('@soundtouchjs/audio-worklet/processor?url', () => ({
-  default: '/mock-soundtouch-processor.js',
-}));
 
 // Stub AudioContext
 const mockGainNode = { gain: { value: 1 }, connect: vi.fn() };

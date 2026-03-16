@@ -27,9 +27,9 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
-    "@soundtouchjs/audio-worklet": "^1.0.7",
     "fflate": "^0.8.2",
     "idb": "^8.0.3",
-    "music-metadata": "^11.12.2"
+    "music-metadata": "^11.12.2",
+    "soundtouchjs": "^0.3.0"
   }
 }
