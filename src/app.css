@@ -16,6 +16,8 @@
 html, body {
   @apply bg-surface text-text m-0 p-0 h-full;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  /* ダブルタップズームを無効にする */
+  touch-action: manipulation;
 }
 
 #app {

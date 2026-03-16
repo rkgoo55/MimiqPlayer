@@ -11,6 +11,7 @@
   import { getStaleProcessingStates, deleteProcessingState, getProcessingState } from './lib/storage/db';
 
   import { settingsStore } from './lib/stores/settingsStore';
+  import Tutorial from './lib/components/Tutorial.svelte';
 
   let showTrackList = $state(true);
 
@@ -62,6 +63,8 @@
     }
   });
 </script>
+
+<Tutorial />
 
 <div class="h-full flex flex-col">
   <!-- Header -->

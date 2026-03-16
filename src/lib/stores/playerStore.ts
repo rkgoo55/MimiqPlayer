@@ -373,10 +373,10 @@ function createPlayerStore() {
           if (!apiSettings.apiEndpoint || !apiSettings.apiKey) {
             throw new Error('APIが設定されていません');
           }
-          if (_currentAudioBuffer && _currentAudioBuffer.duration > 600) {
+          const audioFile = await getAudioFile(currentTrackId);
+          if (audioFile && audioFile.data.byteLength > 100 * 1024 * 1024) {
             throw new Error(AI_DURATION_LIMIT_ERROR);
           }
-          const audioFile = await getAudioFile(currentTrackId);
           if (!audioFile) return;
           const client = getApiClient(apiSettings.apiEndpoint, apiSettings.apiKey);
           const contentHash = cachedMeta?.contentHash;
@@ -600,11 +600,11 @@ function createPlayerStore() {
         if (!apiSettings.apiEndpoint || !apiSettings.apiKey) {
           throw new Error('APIが設定されていません');
         }
-        if (_currentAudioBuffer && _currentAudioBuffer.duration > 600) {
-          throw new Error(AI_DURATION_LIMIT_ERROR);
-        }
         // Server-side: allin1 returns functional labels (verse, chorus, …)
           const audioFile = await getAudioFile(trackId);
+          if (audioFile && audioFile.data.byteLength > 100 * 1024 * 1024) {
+            throw new Error(AI_DURATION_LIMIT_ERROR);
+          }
           if (!audioFile) return;
           const client = getApiClient(apiSettings.apiEndpoint, apiSettings.apiKey);
           const contentHash = cachedMeta?.contentHash;
@@ -782,6 +782,13 @@ function createPlayerStore() {
       await saveAudioFile(trackId, wavData, 'audio/wav');
       await deleteStemFiles(trackId);
 
+      // Recompute content hash from the trimmed audio data
+      const hashBuffer = await crypto.subtle.digest('SHA-256', wavData);
+      const newContentHash = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, '0'))
+        .join('')
+        .slice(0, 32);
+
       const meta = await getTrackMeta(trackId);
       if (meta) {
         const newDuration = (endSample - startSample) / sr;
@@ -799,7 +806,7 @@ function createPlayerStore() {
           chords: undefined,
           analysisVersion: undefined,
           structureSegments: undefined,
-          contentHash: undefined,
+          contentHash: newContentHash,
         });
       }
 
