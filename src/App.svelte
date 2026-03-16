@@ -12,8 +12,7 @@
 
   import { settingsStore } from './lib/stores/settingsStore';
   import Tutorial from './lib/components/Tutorial.svelte';
-
-  let showTrackList = $state(true);
+  import { showTrackListStore } from './lib/stores/uiStore';
 
   onMount(async () => {
     await trackStore.load();
@@ -59,7 +58,7 @@
   // Auto-hide track list when a track is selected (mobile)
   trackStore.selectedId.subscribe((id) => {
     if (id && window.innerWidth < 768) {
-      showTrackList = false;
+      showTrackListStore.set(false);
     }
   });
 </script>
@@ -77,7 +76,7 @@
       <!-- Mobile: toggle track list drawer -->
       <button
         class="md:hidden p-2 rounded-lg hover:bg-surface-lighter transition-colors text-text-muted hover:text-text"
-        onclick={() => (showTrackList = !showTrackList)}
+        onclick={() => showTrackListStore.update((v) => !v)}
         title="曲一覧"
       >
         <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -92,11 +91,11 @@
   <div class="flex-1 flex md:flex-row overflow-hidden relative">
 
     <!-- Mobile overlay backdrop -->
-    {#if showTrackList}
+    {#if $showTrackListStore}
       <div
         class="md:hidden fixed inset-0 z-40 bg-black/50"
         role="presentation"
-        onclick={() => (showTrackList = false)}
+        onclick={() => showTrackListStore.set(false)}
       ></div>
     {/if}
 
@@ -106,7 +105,7 @@
         fixed top-0 left-0 h-full w-72 z-50 bg-surface border-r border-surface-lighter
         overflow-y-auto transition-transform duration-300 p-3
         md:relative md:translate-x-0 md:z-auto md:flex-shrink-0 md:p-4
-        {showTrackList ? 'translate-x-0' : '-translate-x-full'}
+        {$showTrackListStore ? 'translate-x-0' : '-translate-x-full'}
       "
     >
       <!-- Mobile: close button -->
@@ -114,7 +113,7 @@
         <span class="text-sm font-medium text-text-muted">曲一覧</span>
         <button
           class="p-1.5 rounded-lg hover:bg-surface-lighter transition-colors text-text-muted hover:text-text"
-          onclick={() => (showTrackList = false)}
+          onclick={() => showTrackListStore.set(false)}
           aria-label="閉じる"
         >
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

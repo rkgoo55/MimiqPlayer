@@ -1,24 +1,54 @@
 <script lang="ts">
+  import { importTrackFromZip } from '../storage/trackImport';
+  import { trackStore } from '../stores/trackStore';
+  import { playerStore } from '../stores/playerStore';
+  import { showTrackListStore } from '../stores/uiStore';
+
   const STORAGE_KEY = 'mimiqplayer_tutorial_done';
+  const SAMPLE_KEY = 'mimiqplayer_sample_imported';
 
   let visible = $state(false);
   let page = $state(0);
+  let importing = $state(false);
 
   // Show only on first visit
   if (typeof localStorage !== 'undefined' && !localStorage.getItem(STORAGE_KEY)) {
     visible = true;
   }
 
-  function next() {
+  async function next() {
     if (page < 2) {
       page++;
     } else {
-      close();
+      await close();
     }
   }
 
-  function close() {
+  async function close() {
     localStorage.setItem(STORAGE_KEY, '1');
+
+    // 初回のみサンプルトラックをインポート（チュートリアルとは独立したフラグ）
+    if (!localStorage.getItem(SAMPLE_KEY)) {
+      localStorage.setItem(SAMPLE_KEY, '1');
+      importing = true;
+      try {
+        const res = await fetch('./_Vespa.mimiqtrack.zip');
+        if (res.ok) {
+          const blob = await res.blob();
+          const file = new File([blob], '_Vespa.mimiqtrack.zip', { type: 'application/zip' });
+          const track = await importTrackFromZip(file);
+          await trackStore.load();
+          trackStore.select(track.id);
+          await playerStore.loadTrack(track.id);
+          showTrackListStore.set(true);
+        }
+      } catch {
+        // サンプルインポート失敗は無視（通常の利用に影響させない）
+      } finally {
+        importing = false;
+      }
+    }
+
     visible = false;
   }
 
@@ -103,14 +133,24 @@
       </div>
 
       <!-- Actions -->
-      <div class="flex gap-2">
-        <button
-          class="flex-1 py-2.5 text-sm rounded-xl bg-primary text-white hover:bg-primary/90 transition-colors font-medium"
-          onclick={next}
-        >
-          {page < 2 ? '次へ' : 'はじめる'}
-        </button>
-      </div>
+      {#if importing}
+        <div class="flex flex-col items-center gap-2 py-1">
+          <svg class="w-6 h-6 animate-spin text-primary" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <p class="text-xs text-text-muted">サンプル曲を読み込み中…</p>
+        </div>
+      {:else}
+        <div class="flex gap-2">
+          <button
+            class="flex-1 py-2.5 text-sm rounded-xl bg-primary text-white hover:bg-primary/90 transition-colors font-medium"
+            onclick={next}
+          >
+            {page < 2 ? '次へ' : 'はじめる'}
+          </button>
+        </div>
+      {/if}
 
     </div>
   </div>
