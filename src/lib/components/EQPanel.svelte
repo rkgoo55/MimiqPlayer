@@ -73,7 +73,7 @@
             value={eq[i]}
             oninput={(e) => setGain(i, Number((e.target as HTMLInputElement).value))}
             class="absolute appearance-none bg-transparent cursor-pointer z-10 opacity-0"
-            style="writing-mode: vertical-lr; direction: rtl; width: 100%; height: 100%;"
+            style="writing-mode: vertical-lr; direction: rtl; width: 100%; height: 100%; touch-action: none;"
           />
           <!-- Thumb indicator (visible dot at slider position) -->
           <div
