@@ -429,7 +429,7 @@
               {#if canSaveAB && !bookmarksIsAdding}
                 <button
                   class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-primary/15 text-primary hover:bg-primary/25 transition-colors"
-                  onclick={() => { showBookmarks = true; bookmarksIsAdding = true; }}
+                  onclick={() => { void playerStore.saveBookmark(`ループ ${bookmarks.length + 1}`); showBookmarks = true; }}
                 >
                   <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />

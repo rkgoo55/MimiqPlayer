@@ -208,7 +208,7 @@
     }
   }
 
-  /** Section point handle: amber diamond at bottom, dashed vertical line */
+  /** Section point handle: amber diamond at top, dashed vertical line */
   function drawSectionHandle(ctx: CanvasRenderingContext2D, x: number, h: number, active: boolean) {
     ctx.save();
     ctx.strokeStyle = active ? '#fb923c' : '#f59e0b';
@@ -219,10 +219,10 @@
     const S = 6;
     ctx.fillStyle = active ? '#fb923c' : '#f59e0b';
     ctx.beginPath();
-    ctx.moveTo(x, h - S * 2);
-    ctx.lineTo(x + S, h - S);
-    ctx.lineTo(x, h);
-    ctx.lineTo(x - S, h - S);
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + S, S);
+    ctx.lineTo(x, S * 2);
+    ctx.lineTo(x - S, S);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
@@ -493,7 +493,7 @@
   }
 </script>
 
-<div class="w-full">
+<div class="w-full px-3">
   <div
     bind:this={container}
     class="relative w-full h-20 rounded-lg overflow-hidden bg-surface-light touch-none"

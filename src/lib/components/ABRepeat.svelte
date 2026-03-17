@@ -29,16 +29,6 @@
 
 <div class="{bare ? '' : 'bg-surface-light rounded-lg p-3'}">
   <div class="flex items-center gap-2">
-    <!-- ON/OFF toggle (left) -->
-    <button
-      class="px-2 py-0.5 text-xs rounded transition-colors flex-shrink-0
-        {abRepeat.enabled ? 'bg-primary text-white' : 'bg-surface-lighter text-text-muted hover:bg-surface-lighter/80'}"
-      onclick={() => playerStore.toggleABRepeat()}
-      disabled={abRepeat.a === null || abRepeat.b === null}
-    >
-      <span class="inline-block w-6 text-center">{abRepeat.enabled ? 'ON' : 'OFF'}</span>
-    </button>
-
     <!-- Set A -->
     <button
       class="flex-1 flex items-center justify-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors
@@ -50,10 +40,18 @@
       <span class="text-xs">{formatTime(abRepeat.a)}</span>
     </button>
 
-    <!-- Arrow -->
-    <svg class="w-4 h-4 text-text-muted flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
-      <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
-    </svg>
+    <!-- ON/OFF toggle (center, repeat icon) -->
+    <button
+      class="p-2 rounded-lg transition-colors flex-shrink-0
+        {abRepeat.enabled ? 'bg-primary/20 text-primary' : 'bg-surface-lighter text-text-muted/50 hover:text-text-muted'}"
+      onclick={() => playerStore.toggleABRepeat()}
+      disabled={abRepeat.a === null || abRepeat.b === null}
+      title="ABリピート {abRepeat.enabled ? 'OFF' : 'ON'}"
+    >
+      <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12c0-1.232-.046-2.453-.138-3.662a4.006 4.006 0 0 0-3.7-3.7 48.678 48.678 0 0 0-7.324 0 4.006 4.006 0 0 0-3.7 3.7c-.017.22-.032.441-.046.662M19.5 12l3-3m-3 3-3-3m-12 3c0 1.232.046 2.453.138 3.662a4.006 4.006 0 0 0 3.7 3.7 48.656 48.656 0 0 0 7.324 0 4.006 4.006 0 0 0 3.7-3.7c.017-.22.032-.441.046-.662M4.5 12l3 3m-3-3-3 3" />
+      </svg>
+    </button>
 
     <!-- Set B -->
     <button

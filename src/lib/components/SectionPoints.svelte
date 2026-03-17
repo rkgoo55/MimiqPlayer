@@ -112,13 +112,13 @@
   }
 </script>
 
-{#if ps.trackId}
-  <div class="space-y-2">
+<div class="space-y-2">
     <!-- Header: add at current position + auto-detect -->
     <div class="flex items-center gap-1.5 flex-wrap">
       <button
-        class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-surface-lighter text-text-muted hover:bg-surface-lighter/80 hover:text-text transition-colors"
+        class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-surface-lighter text-text-muted hover:bg-surface-lighter/80 hover:text-text transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         onclick={() => playerStore.addSectionPoint()}
+        disabled={!ps.trackId}
         title="現在位置にセクションを追加"
       >
         <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -142,13 +142,13 @@
           <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
           </svg>
-          自動検出
+          楽曲構造を解析
         {/if}
       </button>
     </div>
 
     {#if stemNotReady}
-      <p class="text-[11px] text-amber-400">自動検出にはステム分離が必要です。先にステムミキサーで「ステムを分離」を実行してください。</p>
+      <p class="text-[11px] text-amber-400">楽曲構造を解析するにはステム分離が必要です。先にミキサーで「ステムを分離」を実行してください。</p>
     {/if}
     {#if isAnalyzing}
       <p class="text-[11px] text-text-muted opacity-70">数分かかる場合があります・処理中はアプリを閉じないでください</p>
@@ -245,7 +245,7 @@
                   title="このセクションを削除"
                 >
                   <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m19 7-.867 12.142A2 2 0 0 1 16.138 21H7.862a2 2 0 0 1-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v3M4 7h16" />
                   </svg>
                 </button>
               {:else}
@@ -276,7 +276,6 @@
         {/each}
       </div>
     {:else if !isAnalyzing}
-      <p class="text-xs text-text-muted">AIで楽曲構造を解析してセクションを自動検出するか、再生中に「ここで区切る」で手動追加できます。</p>
+      <p class="text-xs text-text-muted">「再生位置で区切る」で手動追加するか、AIで楽曲構造を解析して自動追加できます。</p>
     {/if}
   </div>
-{/if}
