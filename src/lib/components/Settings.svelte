@@ -3,6 +3,7 @@
   import { settingsStore } from '../stores/settingsStore';
   import type { AppSettings } from '../types';
   import { getStorageEstimate, deleteAllTracks } from '../storage/db';
+  import { tutorialStore } from '../stores/uiStore';
 
   let isOpen = $state(false);
   let storage = $state({ usedMB: 0, quotaMB: 0, ratio: 0 });
@@ -112,6 +113,16 @@
           onclick={handleDeleteAll}
         >
           すべてのトラックを削除
+        </button>
+      </div>
+
+      <!-- Tutorial reset -->
+      <div>
+        <button
+          class="w-full py-1.5 px-3 text-xs rounded-lg bg-surface-lighter text-text-muted hover:bg-surface-lighter/80 hover:text-text transition-colors"
+          onclick={() => { localStorage.removeItem('mimiqplayer_tutorial_done'); tutorialStore.set(true); isOpen = false; }}
+        >
+          チュートリアルをもう一度見る
         </button>
       </div>
 

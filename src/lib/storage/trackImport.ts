@@ -1,5 +1,5 @@
 import { unzip } from 'fflate';
-import type { TrackMeta, StemType, EQBands, LoopBookmark, StemVolumes, StemStatus } from '../types';
+import type { TrackMeta, StemType, EQBands, LoopBookmark, StemVolumes, StemStatus, SectionPoint } from '../types';
 import { saveTrackMeta, saveAudioFile, saveStemFile } from './db';
 import { TRACK_EXPORT_VERSION, sanitizeBaseName } from './trackExport';
 
@@ -23,6 +23,9 @@ interface ExportMetadata {
   chords?: { time: number; chord: string }[];
   eq?: EQBands;
   bookmarks?: LoopBookmark[];
+  sectionPoints?: SectionPoint[];
+  sectionLabels?: Record<string, string>;
+  structureSegments?: { start: number; end: number; label: string }[];
   stemStatus?: StemStatus;
   stemVolumes?: StemVolumes;
 }
@@ -116,6 +119,9 @@ export async function importTrackFromZip(file: File): Promise<TrackMeta> {
   if (exportMeta.chords !== undefined) trackMeta.chords = exportMeta.chords;
   if (exportMeta.eq !== undefined) trackMeta.eq = exportMeta.eq;
   if (exportMeta.bookmarks !== undefined) trackMeta.bookmarks = exportMeta.bookmarks;
+  if (exportMeta.sectionPoints !== undefined) trackMeta.sectionPoints = exportMeta.sectionPoints;
+  if (exportMeta.sectionLabels !== undefined) trackMeta.sectionLabels = exportMeta.sectionLabels;
+  if (exportMeta.structureSegments !== undefined) trackMeta.structureSegments = exportMeta.structureSegments;
   if (exportMeta.stemVolumes !== undefined) trackMeta.stemVolumes = exportMeta.stemVolumes;
 
   // stemStatus: 'ready' only if all advertised stems were actually found in the ZIP

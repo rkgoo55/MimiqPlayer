@@ -87,6 +87,9 @@ export async function exportTrackAsZip(
   if (meta.chords !== undefined) metaPayload.chords = meta.chords;
   if (meta.eq !== undefined) metaPayload.eq = meta.eq;
   if (meta.bookmarks !== undefined) metaPayload.bookmarks = meta.bookmarks;
+  if (meta.sectionPoints !== undefined) metaPayload.sectionPoints = meta.sectionPoints;
+  if (meta.sectionLabels !== undefined) metaPayload.sectionLabels = meta.sectionLabels;
+  if (meta.structureSegments !== undefined) metaPayload.structureSegments = meta.structureSegments;
   if (meta.stemStatus !== undefined) metaPayload.stemStatus = meta.stemStatus;
   if (meta.stemVolumes !== undefined) metaPayload.stemVolumes = meta.stemVolumes;
 

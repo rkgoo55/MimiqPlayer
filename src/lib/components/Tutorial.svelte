@@ -2,9 +2,9 @@
   import { importTrackFromZip } from '../storage/trackImport';
   import { trackStore } from '../stores/trackStore';
   import { playerStore } from '../stores/playerStore';
-  import { showTrackListStore } from '../stores/uiStore';
+  import { showTrackListStore, tutorialStore } from '../stores/uiStore';
 
-  const STORAGE_KEY = 'mimiqplayer_tutorial_done';
+  const STORAGE_KEY = 'mimiqplayer_tutorial_done_v2';
   const SAMPLE_KEY = 'mimiqplayer_sample_imported';
 
   let visible = $state(false);
@@ -16,6 +16,11 @@
     visible = true;
   }
 
+  // Allow re-triggering from Settings
+  tutorialStore.subscribe((show) => {
+    if (show) { visible = true; page = 0; }
+  });
+
   async function next() {
     if (page < 2) {
       page++;
@@ -25,6 +30,7 @@
   }
 
   async function close() {
+    tutorialStore.set(false);
     localStorage.setItem(STORAGE_KEY, '1');
 
     // 初回のみサンプルトラックをインポート（チュートリアルとは独立したフラグ）
@@ -62,7 +68,9 @@
     {
       icon: '🤖',
       title: 'AI 機能を使うには',
-      body: 'AI 機能を使いたい場合は、APIキーが必要です。下記のリンクからお気軽にご連絡ください。',
+      // CAMPAIGN: 一時的にコメントアウト
+      // body: 'AI 機能を使いたい場合は、APIキーが必要です。下記のリンクからお気軽にご連絡ください。',
+      body: 'β版として公開中です。AI 機能を気軽にお試しください。使ってみた感想を下記リンクからぜひ教えてください！',
     },
     {
       icon: '🔗',

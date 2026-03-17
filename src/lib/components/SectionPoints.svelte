@@ -22,6 +22,13 @@
   let activeSectionIdValue: string | null = $state(null);
   activeSectionId.subscribe((v) => (activeSectionIdValue = v));
 
+  // Auto-select the section containing the current playhead when sections first become available
+  $effect(() => {
+    if (sections.length > 1 && activeSectionIdValue === null) {
+      playerStore.loadSectionAtTime(ps.currentTime, false);
+    }
+  });
+
   let stemState: StemState = $state({
     status: 'none',
     volumes: { vocals: 1, drums: 1, bass: 1, other: 1, guitar: 1, piano: 1 },
@@ -73,10 +80,11 @@
 
   async function handleAutoDetect() {
     if (isAnalyzing || !ps.trackId) return;
-    if (!get(settingsStore).apiKey) {
-      apiKeyModalStore.set(true);
-      return;
-    }
+    // CAMPAIGN: 一時的にコメントアウト
+    // if (!get(settingsStore).apiKey) {
+    //   apiKeyModalStore.set(true);
+    //   return;
+    // }
     if (stemState.status !== 'ready') {
       stemNotReady = true;
       return;

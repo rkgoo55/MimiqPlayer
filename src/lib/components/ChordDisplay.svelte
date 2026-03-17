@@ -85,10 +85,11 @@
 
   async function handleAnalyze() {
     if (isAnalyzing || !ps.trackId) return;
-    if (!get(settingsStore).apiKey) {
-      apiKeyModalStore.set(true);
-      return;
-    }
+    // CAMPAIGN: 一時的にコメントアウト
+    // if (!get(settingsStore).apiKey) {
+    //   apiKeyModalStore.set(true);
+    //   return;
+    // }
     aiError = null;
     try {
       await playerStore.analyzeTrack();

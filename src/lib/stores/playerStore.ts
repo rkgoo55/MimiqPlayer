@@ -289,9 +289,10 @@ function createPlayerStore() {
         isPlaying: false,
         abRepeat: { enabled: false, a: null, b: null },
       }));
-      // Reset trim handles whenever a new track is loaded
+      // Reset trim handles and active section whenever a new track is loaded
       trimStart.set(0);
       trimEnd.set(null);
+      activeSectionId.set(null);
 
       const isCurrentTrack = () => get({ subscribe }).trackId === trackId;
 

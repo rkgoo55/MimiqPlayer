@@ -256,8 +256,8 @@
         }
       }
     }
-    // Playhead (only when zoomed so tap-to-seek at zoom=1 is unaffected)
-    if (zoomLevel > 1 && Math.abs(x - timeToX(playerState.currentTime, w)) <= AB_HIT_PX) return 'playhead';
+    // Playhead (draggable at any zoom level)
+    if (Math.abs(x - timeToX(playerState.currentTime, w)) <= AB_HIT_PX) return 'playhead';
     return null;
   }
 
@@ -518,7 +518,7 @@
   {#if zoomLevel > 1}
   <div
     bind:this={scrollbarTrack}
-    class="relative w-full h-2 mt-1 rounded-full bg-surface-light overflow-hidden cursor-pointer touch-none"
+    class="relative w-full h-2 mt-2.5 rounded-full bg-surface-light overflow-hidden cursor-pointer touch-none"
     onpointerdown={handleScrollbarDown}
     onpointermove={handleScrollbarMove}
     onpointerup={handleScrollbarUp}

@@ -14,9 +14,9 @@
     abRepeat: { enabled: false, a: null, b: null },
   });
 
-  let settings: AppSettings = $state({ 
-    skipDuration: 5, 
-    defaultSpeed: 1, 
+  let settings: AppSettings = $state({
+    skipDuration: 5,
+    defaultSpeed: 1,
     defaultPitch: 0,
     keepAwake: false,
     apiEndpoint: '',
@@ -32,6 +32,23 @@
     const s = Math.floor(sec % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
   }
+
+  // Long-press skip: initial skip on pointerdown, then repeat every 150ms after 300ms hold
+  let skipTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let skipIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  function startSkip(delta: number, e: PointerEvent) {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    playerStore.skip(delta);
+    skipTimeoutId = setTimeout(() => {
+      skipIntervalId = setInterval(() => playerStore.skip(delta), 150);
+    }, 300);
+  }
+
+  function stopSkip() {
+    if (skipTimeoutId !== null) { clearTimeout(skipTimeoutId); skipTimeoutId = null; }
+    if (skipIntervalId !== null) { clearInterval(skipIntervalId); skipIntervalId = null; }
+  }
 </script>
 
 <div class="space-y-2">
@@ -45,7 +62,9 @@
     <!-- Skip back -->
     <button
       class="p-2.5 md:p-2 rounded-lg hover:bg-surface-lighter active:bg-surface-lighter transition-colors text-text-muted hover:text-text relative"
-      onclick={() => playerStore.skip(-settings.skipDuration)}
+      onpointerdown={(e) => startSkip(-settings.skipDuration, e)}
+      onpointerup={stopSkip}
+      onpointercancel={stopSkip}
       title="{settings.skipDuration}秒戻る"
     >
       <svg class="w-6 h-6 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
@@ -74,7 +93,9 @@
     <!-- Skip forward -->
     <button
       class="p-2.5 md:p-2 rounded-lg hover:bg-surface-lighter active:bg-surface-lighter transition-colors text-text-muted hover:text-text relative"
-      onclick={() => playerStore.skip(settings.skipDuration)}
+      onpointerdown={(e) => startSkip(settings.skipDuration, e)}
+      onpointerup={stopSkip}
+      onpointercancel={stopSkip}
       title="{settings.skipDuration}秒進む"
     >
       <svg class="w-6 h-6 md:w-5 md:h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
