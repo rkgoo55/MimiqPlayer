@@ -197,18 +197,18 @@
         {/if}
       </div>
 
-      <!-- Divider -->
-      <div class="w-px bg-surface-lighter flex-shrink-0 self-stretch"></div>
-
       <!-- Analyze button (right-aligned) -->
       <div class="flex items-center gap-1.5 flex-shrink-0">
         {#if isAnalyzing}
+          <div class="w-px bg-surface-lighter flex-shrink-0 self-stretch"></div>
           <p class="text-[10px] text-text-muted opacity-70">数分かかる場合があります</p>
         {/if}
         {#if aiError}
+          <div class="w-px bg-surface-lighter flex-shrink-0 self-stretch"></div>
           <p class="text-[10px] text-red-400">{aiError}</p>
         {/if}
         {#if needsAnalysis}
+          <div class="w-px bg-surface-lighter flex-shrink-0 self-stretch"></div>
           <button
             class="flex items-center gap-1 px-2 py-0.5 text-xs rounded bg-accent/15 text-accent hover:bg-accent/25 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={handleAnalyze}
