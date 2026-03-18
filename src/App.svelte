@@ -94,9 +94,9 @@
       <h1 class="text-base md:text-lg font-bold">MimiqPlayer</h1>
     </div>
     <div class="flex items-center gap-1">
-      <!-- Mobile: toggle track list drawer -->
+      <!-- Toggle track list drawer -->
       <button
-        class="md:hidden p-2 rounded-lg hover:bg-surface-lighter transition-colors text-text-muted hover:text-text"
+        class="p-2 rounded-lg hover:bg-surface-lighter transition-colors text-text-muted hover:text-text"
         onclick={() => showTrackListStore.update((v) => !v)}
         title="曲一覧"
       >
@@ -125,12 +125,12 @@
       class="
         fixed top-0 left-0 h-full w-72 z-50 bg-surface border-r border-surface-lighter
         overflow-y-auto transition-transform duration-300 p-3
-        md:relative md:translate-x-0 md:z-auto md:flex-shrink-0 md:p-4
-        {$showTrackListStore ? 'translate-x-0' : '-translate-x-full'}
+        md:relative md:z-auto md:flex-shrink-0 md:p-4
+        {$showTrackListStore ? 'translate-x-0' : '-translate-x-full md:hidden'}
       "
     >
-      <!-- Mobile: close button -->
-      <div class="md:hidden flex items-center justify-between mb-3">
+      <!-- Close button -->
+      <div class="flex items-center justify-between mb-3">
         <span class="text-sm font-medium text-text-muted">曲一覧</span>
         <button
           class="p-1.5 rounded-lg hover:bg-surface-lighter transition-colors text-text-muted hover:text-text"

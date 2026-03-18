@@ -492,11 +492,21 @@
     return Math.max(0, Math.min(1 - range, pf - range / 2));
   }
 
+  // Long-press zoom
+  let zoomTimerId: ReturnType<typeof setTimeout> | null = null;
+  let zoomRepeatId: ReturnType<typeof setInterval> | null = null;
+
+  function stopZoom() {
+    if (zoomTimerId !== null) { clearTimeout(zoomTimerId); zoomTimerId = null; }
+    if (zoomRepeatId !== null) { clearInterval(zoomRepeatId); zoomRepeatId = null; }
+  }
+
   function zoomIn() {
     const newZoom = Math.min(16, zoomLevel * 1.5);
     zoomOffset = playheadOffsetForZoom(newZoom);
     zoomLevel = newZoom;
     requestAnimationFrame(draw);
+    if (newZoom >= 16) stopZoom();
   }
 
   function zoomOut() {
@@ -504,6 +514,15 @@
     zoomOffset = newZoom === 1 ? 0 : playheadOffsetForZoom(newZoom);
     zoomLevel = newZoom;
     requestAnimationFrame(draw);
+    if (newZoom <= 1) stopZoom();
+  }
+
+  function startZoom(fn: () => void, e: PointerEvent) {
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    fn();
+    zoomTimerId = setTimeout(() => {
+      zoomRepeatId = setInterval(fn, 150);
+    }, 300);
   }
 </script>
 
@@ -532,7 +551,9 @@
   <div class="flex items-center gap-1.5 mt-2">
     <button
       class="flex-none w-3.5 h-3.5 flex items-center justify-center rounded bg-surface-light text-text-muted hover:text-text hover:bg-surface-lighter active:bg-surface-lighter transition-colors text-[9px] leading-none"
-      onclick={zoomOut}
+      onpointerdown={(e) => startZoom(zoomOut, e)}
+      onpointerup={stopZoom}
+      onpointercancel={stopZoom}
       disabled={zoomLevel <= 1}
       aria-label="縮小"
     >−</button>
@@ -558,7 +579,9 @@
     </div>
     <button
       class="flex-none w-3.5 h-3.5 flex items-center justify-center rounded bg-surface-light text-text-muted hover:text-text hover:bg-surface-lighter active:bg-surface-lighter transition-colors text-[9px] leading-none"
-      onclick={zoomIn}
+      onpointerdown={(e) => startZoom(zoomIn, e)}
+      onpointerup={stopZoom}
+      onpointercancel={stopZoom}
       disabled={zoomLevel >= 16}
       aria-label="拡大"
     >+</button>
