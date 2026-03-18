@@ -373,6 +373,7 @@
     const MIN_GAP = 0.05;
     if (dragTarget === 'playhead') {
       playerStore.seek(t);
+      onseek?.(t);
       return;
     }
     if (dragTarget === 'trimStart') {
