@@ -8,3 +8,6 @@ export const showTrackListStore = writable(true);
 
 /** Triggers the tutorial modal to show (set true to open, Tutorial resets to false on close) */
 export const tutorialStore = writable(false);
+
+/** 境界削除ボタン押下中に波形でプレビューする結合後の範囲 */
+export const mergePreviewStore = writable<{ a: number; b: number } | null>(null);

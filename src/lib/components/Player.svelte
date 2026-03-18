@@ -485,7 +485,7 @@
         <button
           class="flex-1 py-1 text-xs rounded-md transition-colors font-medium
             {repeatTab === 'section' ? 'bg-surface-lighter text-text shadow-sm' : 'text-text-muted hover:text-text'}"
-          onclick={() => { repeatTab = 'section'; }}
+          onclick={() => { repeatTab = 'section'; playerStore.loadSectionAtTime(ps.currentTime, false); }}
         >セクションリピート</button>
       </div>
 

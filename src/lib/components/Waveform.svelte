@@ -1,5 +1,6 @@
 <script lang="ts">
   import { playerStore, trimStart as trimStartStore, trimEnd as trimEndStore, activeBookmarkId as activeBookmarkIdStore, activeSectionId as activeSectionIdStore } from '../stores/playerStore';
+  import { mergePreviewStore } from '../stores/uiStore';
   import type { WaveformData, PlayerState, LoopBookmark, SectionPoint } from '../types';
 
   interface Props {
@@ -23,6 +24,7 @@
   let _sectionPoints = $state<SectionPoint[]>([]);
   let _draggingSectionId: string | null = null;
   let _activeSectionId: string | null = null;
+  let _mergePreview: { a: number; b: number } | null = $state(null);
 
   let canvas: HTMLCanvasElement;
   let container: HTMLDivElement;
@@ -56,6 +58,7 @@
   $effect(() => { const u = activeBookmarkIdStore.subscribe((v) => { _activeBookmarkId = v; }); return u; });
   $effect(() => { const u = playerStore.sectionPoints.subscribe((v) => { _sectionPoints = v; requestAnimationFrame(draw); }); return u; });
   $effect(() => { const u = activeSectionIdStore.subscribe((v) => { _activeSectionId = v; }); return u; });
+  $effect(() => { const u = mergePreviewStore.subscribe((v) => { _mergePreview = v; requestAnimationFrame(draw); }); return u; });
 
   // Reset zoom when track changes
   let _lastTrackId: string | null = null;
@@ -122,6 +125,21 @@
       if (sx2 > sx1) ctx.fillRect(sx1, 0, sx2 - sx1, h);
     }
 
+    // ── Merge preview (境界削除ホバー時) ─────────────────────────────────
+    if (_mergePreview) {
+      const max = timeToX(_mergePreview.a, w), mbx = timeToX(_mergePreview.b, w);
+      const cmx = Math.max(0, max), cmbx = Math.min(w, mbx);
+      if (cmbx > cmx) {
+        ctx.fillStyle = 'rgba(234,179,8,0.15)';
+        ctx.fillRect(cmx, 0, cmbx - cmx, h);
+        ctx.strokeStyle = 'rgba(234,179,8,0.7)'; ctx.lineWidth = 1.5;
+        ctx.setLineDash([4, 3]);
+        if (max >= 0 && max <= w) { ctx.beginPath(); ctx.moveTo(max, 0); ctx.lineTo(max, h); ctx.stroke(); }
+        if (mbx >= 0 && mbx <= w) { ctx.beginPath(); ctx.moveTo(mbx, 0); ctx.lineTo(mbx, h); ctx.stroke(); }
+        ctx.setLineDash([]);
+      }
+    }
+
     // ── A-B repeat region fill ────────────────────────────────────────────
     const { abRepeat } = playerState;
     if (abRepeat.a !== null && abRepeat.b !== null) {
@@ -129,7 +147,7 @@
       const bx = timeToX(abRepeat.b, w);
       const cax = Math.max(0, ax), cbx = Math.min(w, bx);
       if (cbx > cax) {
-        ctx.fillStyle = abRepeat.enabled ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)';
+        ctx.fillStyle = abRepeat.enabled ? 'rgba(234,179,8,0.15)' : 'rgba(234,179,8,0.07)';
         ctx.fillRect(cax, 0, cbx - cax, h);
       }
     }
