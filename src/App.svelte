@@ -14,7 +14,17 @@
   import Tutorial from './lib/components/Tutorial.svelte';
   import { showTrackListStore } from './lib/stores/uiStore';
 
+  let isAtTop = true;
+  let isLandscapeMobile = false;
+
+  function handleMainScroll(e: Event) {
+    isAtTop = (e.target as HTMLElement).scrollTop === 0;
+  }
+
   onMount(async () => {
+    const mq = window.matchMedia('(orientation: landscape) and (max-height: 500px)');
+    isLandscapeMobile = mq.matches;
+    mq.addEventListener('change', (e) => { isLandscapeMobile = e.matches; });
     await trackStore.load();
 
     // Restore the previously selected track from the URL hash
@@ -88,7 +98,7 @@
 
 <div class="h-full flex flex-col">
   <!-- Header -->
-  <header class="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 border-b border-surface-lighter flex-shrink-0">
+  <header class="flex items-center justify-between px-3 py-2 md:px-4 md:py-3 border-b border-surface-lighter flex-shrink-0 transition-all duration-200 {isLandscapeMobile && !isAtTop ? 'hidden' : ''}">
     <div class="flex items-center gap-2">
       <img class="w-5 h-5 md:w-6 md:h-6" src="./logo_favicon.png" alt="MimiqPlayer Logo" />
       <h1 class="text-base md:text-lg font-bold">MimiqPlayer</h1>
@@ -149,7 +159,7 @@
     </aside>
 
     <!-- Player Area -->
-    <main class="flex-1 p-3 md:p-6 overflow-y-auto w-full">
+    <main class="flex-1 p-3 md:p-6 overflow-y-auto w-full {isLandscapeMobile ? 'pt-8' : ''}" onscroll={handleMainScroll}>
       <Player />
     </main>
   </div>
