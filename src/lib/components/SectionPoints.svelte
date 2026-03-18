@@ -247,8 +247,8 @@
                   <span class="font-medium truncate">{label}</span>
                   <span class="font-mono text-text-muted/70 flex-shrink-0 ml-auto">{formatTime(sec.a)}–{formatTime(sec.b)}</span>
                 {:else}
-                  <span class="flex-1 font-mono">{formatTime(sec.a)} → {formatTime(sec.b)}</span>
-                  <span class="text-text-muted/60 flex-shrink-0">{(sec.b - sec.a).toFixed(1)}s</span>
+                  <span class="font-medium truncate">{(sec.b - sec.a).toFixed(1)}s</span>
+                  <span class="font-mono text-text-muted/70 flex-shrink-0 ml-auto">{formatTime(sec.a)}–{formatTime(sec.b)}</span>
                 {/if}
               </button>
 
