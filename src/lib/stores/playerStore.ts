@@ -729,6 +729,10 @@ function createPlayerStore() {
         const meta = await getTrackMeta(state.trackId);
         if (meta) await saveTrackMeta({ ...meta, sectionPoints: next });
       }
+      // Re-select the section that now contains the current time
+      if (get(activeSectionId) !== null) {
+        this.loadSectionAtTime(state.currentTime, false);
+      }
     },
 
     async deleteSectionPoint(id: string): Promise<void> {
@@ -738,6 +742,15 @@ function createPlayerStore() {
       if (state.trackId) {
         const meta = await getTrackMeta(state.trackId);
         if (meta) await saveTrackMeta({ ...meta, sectionPoints: next });
+      }
+      // Re-select the section that now contains the current time
+      if (get(activeSectionId) !== null) {
+        if (next.length === 0) {
+          activeSectionId.set(null);
+          update((s) => ({ ...s, abRepeat: { enabled: false, a: null, b: null } }));
+        } else {
+          this.loadSectionAtTime(state.currentTime, false);
+        }
       }
     },
 
