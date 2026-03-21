@@ -26,19 +26,33 @@
 
   let chipContainer: HTMLDivElement | null = $state(null);
 
+  function scrollActiveChipToCenter(behavior: ScrollBehavior = 'smooth') {
+    if (!chipContainer) return;
+    const activeEl = chipContainer.querySelector<HTMLElement>('[data-active="true"]');
+    if (!activeEl) return;
+    const containerRect = chipContainer.getBoundingClientRect();
+    const chipRect = activeEl.getBoundingClientRect();
+    const chipLeft = chipRect.left - containerRect.left + chipContainer.scrollLeft;
+    const containerW = containerRect.width;
+    const chipW = chipRect.width;
+    chipContainer.scrollTo({ left: chipLeft - containerW / 2 + chipW / 2, behavior });
+  }
+
   // アクティブチップが変わったらコンテナの中央にスクロール
   $effect(() => {
     const _ = activeSectionIndex;
     if (!chipContainer) return;
-    requestAnimationFrame(() => {
-      if (!chipContainer) return;
-      const activeEl = chipContainer.querySelector<HTMLElement>('[data-active="true"]');
-      if (!activeEl) return;
-      const containerW = chipContainer.offsetWidth;
-      const chipLeft = activeEl.offsetLeft;
-      const chipW = activeEl.offsetWidth;
-      chipContainer.scrollTo({ left: chipLeft - containerW / 2 + chipW / 2, behavior: 'smooth' });
+    requestAnimationFrame(() => scrollActiveChipToCenter());
+  });
+
+  // コンテナ幅が変わったとき（サイドバー開閉など）も再センタリング
+  $effect(() => {
+    if (!chipContainer) return;
+    const ro = new ResizeObserver(() => {
+      requestAnimationFrame(() => scrollActiveChipToCenter('instant'));
     });
+    ro.observe(chipContainer);
+    return () => ro.disconnect();
   });
 
   // Auto-select the section containing the current playhead when sections first become available
