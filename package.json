@@ -27,6 +27,8 @@
     "vitest": "^4.0.18"
   },
   "dependencies": {
+    "@ffmpeg/ffmpeg": "^0.12.15",
+    "@ffmpeg/util": "^0.12.2",
     "fflate": "^0.8.2",
     "idb": "^8.0.3",
     "music-metadata": "^11.12.2",

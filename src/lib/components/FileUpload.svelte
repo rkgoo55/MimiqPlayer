@@ -48,7 +48,9 @@
         // ── Video file → convert to audio ─────────────────────────────────
         if (isVideoFile(file)) {
           uploadStatus = `音声変換中... (${file.name})`;
-          const audioFile = await videoToAudio(file);
+          const audioFile = await videoToAudio(file, (msg) => {
+            uploadStatus = `${msg} (${file.name})`;
+          });
           uploadStatus = '読み込み中...';
           const meta = await trackStore.addFile(audioFile);
           const tracks = await import('../storage/db').then((m) => m.getAllTracks());

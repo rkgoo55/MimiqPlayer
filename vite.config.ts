@@ -9,4 +9,7 @@ export default defineConfig({
     tailwindcss(),
   ],
   base: '/',
+  optimizeDeps: {
+    exclude: ['@ffmpeg/ffmpeg', '@ffmpeg/util'],
+  },
 })

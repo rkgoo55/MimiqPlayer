@@ -1,3 +1,5 @@
+import { FFmpeg } from '@ffmpeg/ffmpeg';
+import { fetchFile } from '@ffmpeg/util';
 import { encodeWavStereo16 } from './wavUtils';
 
 /**
@@ -26,133 +28,83 @@ export function isVideoFile(file: File): boolean {
   return ['mp4', 'm4v', 'mov', 'webm', 'mkv', 'avi', 'mpeg', 'mpg', '3gp', '3g2'].includes(ext);
 }
 
+// ── Lazy-loaded ffmpeg singleton ───────────────────────────────────────────
+let ffmpegInstance: FFmpeg | null = null;
+
+async function getFFmpeg(): Promise<FFmpeg> {
+  if (ffmpegInstance) return ffmpegInstance;
+  const ffmpeg = new FFmpeg();
+  await ffmpeg.load();
+  ffmpegInstance = ffmpeg;
+  return ffmpeg;
+}
+
 /**
  * Extract the audio track from a video File and return it as a new audio/wav File.
  *
  * Strategy:
- *   Fast path  — `AudioContext.decodeAudioData()` (audio-only containers, some MP4/WebM)
- *   Slow path  — `HTMLVideoElement` + Web Audio API realtime capture at 16× speed
- *                (handles .mov / HEVC / any format the browser can play)
+ *   Fast path  — `AudioContext.decodeAudioData()` (works for MP4/WebM with supported codecs)
+ *   Fallback   — ffmpeg.wasm (handles any format: .mov, HEVC, MKV, etc.)
  */
-export async function videoToAudio(file: File): Promise<File> {
+export async function videoToAudio(
+  file: File,
+  onProgress?: (message: string) => void,
+): Promise<File> {
   const baseName = file.name.replace(/\.[^.]+$/, '');
 
+  // Formats known to always fail decodeAudioData — skip directly to ffmpeg
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  const skipFastPath =
+    file.type === 'video/quicktime' || ['mov', 'hevc', 'mkv', 'avi'].includes(ext);
+
   // ── Fast path ────────────────────────────────────────────────────────────
-  try {
-    const arrayBuffer = await file.arrayBuffer();
-    const ctx = new AudioContext();
-    let audioBuffer: AudioBuffer;
+  if (!skipFastPath) {
     try {
-      audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-    } finally {
-      await ctx.close();
+      const arrayBuffer = await file.arrayBuffer();
+      const ctx = new AudioContext();
+      let audioBuffer: AudioBuffer;
+      try {
+        audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      } finally {
+        await ctx.close();
+      }
+      const left = audioBuffer.getChannelData(0);
+      const right = audioBuffer.numberOfChannels >= 2 ? audioBuffer.getChannelData(1) : left;
+      const wavBuffer = encodeWavStereo16(left, right, audioBuffer.sampleRate);
+      return new File([wavBuffer], `${baseName}.wav`, { type: 'audio/wav' });
+    } catch {
+      // decodeAudioData failed — fall through to ffmpeg
     }
-    const left = audioBuffer.getChannelData(0);
-    const right = audioBuffer.numberOfChannels >= 2 ? audioBuffer.getChannelData(1) : left;
-    const wavBuffer = encodeWavStereo16(left, right, audioBuffer.sampleRate);
-    return new File([wavBuffer], `${baseName}.wav`, { type: 'audio/wav' });
-  } catch {
-    // decodeAudioData failed (e.g. .mov / HEVC) — fall through to slow path
   }
 
-  // ── Slow path: HTMLVideoElement capture ──────────────────────────────────
-  return extractViaVideoElement(file, baseName);
-}
+  // ── ffmpeg.wasm fallback ─────────────────────────────────────────────────
+  onProgress?.('ffmpeg を読み込み中...');
+  const ffmpeg = await getFFmpeg();
 
-/**
- * Capture audio by playing the video in a hidden HTMLVideoElement at maximum
- * playback speed and collecting raw PCM samples via a ScriptProcessorNode.
- *
- * Typical 3-min video at 16× ≈ 11 s of processing time.
- */
-async function extractViaVideoElement(file: File, baseName: string): Promise<File> {
-  const SAMPLE_RATE = 44100;
-  const objectUrl = URL.createObjectURL(file);
+  const inputName = `input${ext ? '.' + ext : ''}`;
+  const outputName = 'output.wav';
 
-  try {
-    // 1. Load metadata to get duration
-    const video = document.createElement('video');
-    video.src = objectUrl;
-    video.preload = 'metadata';
-    // Silence output so the user doesn't hear it during extraction
-    video.volume = 0;
+  onProgress?.('音声を抽出中...');
+  await ffmpeg.writeFile(inputName, await fetchFile(file));
+  await ffmpeg.exec([
+    '-i', inputName,
+    '-vn',              // no video
+    '-acodec', 'pcm_s16le',
+    '-ar', '44100',
+    '-ac', '2',         // stereo
+    outputName,
+  ]);
 
-    await new Promise<void>((resolve, reject) => {
-      video.addEventListener('loadedmetadata', () => resolve(), { once: true });
-      video.addEventListener('error', () =>
-        reject(new Error(`"${file.name}" を読み込めませんでした。非対応のコーデックの可能性があります。`)),
-        { once: true },
-      );
-      video.load();
-    });
+  const outputData = await ffmpeg.readFile(outputName);
 
-    const duration = video.duration;
-    if (!Number.isFinite(duration) || duration <= 0) {
-      throw new Error(`"${file.name}" の再生時間を取得できませんでした。`);
-    }
+  // Clean up ffmpeg's virtual filesystem
+  await ffmpeg.deleteFile(inputName);
+  await ffmpeg.deleteFile(outputName);
 
-    const totalSamples = Math.ceil(duration * SAMPLE_RATE);
-    const leftBuf = new Float32Array(totalSamples);
-    const rightBuf = new Float32Array(totalSamples);
-    let writePos = 0;
-
-    // 2. Wire up Web Audio pipeline
-    const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-
-    const BLOCK = 4096;
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    const processor = audioCtx.createScriptProcessor(BLOCK, 2, 2);
-
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    processor.onaudioprocess = (e: AudioProcessingEvent) => {
-      const inL = e.inputBuffer.getChannelData(0);
-      const inR = e.inputBuffer.numberOfChannels >= 2
-        ? e.inputBuffer.getChannelData(1)
-        : inL;
-      const copyLen = Math.min(inL.length, totalSamples - writePos);
-      if (copyLen <= 0) return;
-      leftBuf.set(inL.subarray(0, copyLen), writePos);
-      rightBuf.set(inR.subarray(0, copyLen), writePos);
-      writePos += copyLen;
-    };
-
-    const source = audioCtx.createMediaElementSource(video);
-    const silentGain = audioCtx.createGain();
-    silentGain.gain.value = 0;
-    source.connect(processor);
-    processor.connect(silentGain);
-    silentGain.connect(audioCtx.destination);
-
-    // 3. Play at maximum allowed speed
-    video.playbackRate = 16;
-
-    await new Promise<void>((resolve, reject) => {
-      video.addEventListener('ended', () => resolve(), { once: true });
-      video.addEventListener('error', () =>
-        reject(new Error(`"${file.name}" の再生中にエラーが発生しました。`)),
-        { once: true },
-      );
-      video.play().catch(reject);
-    });
-
-    // Allow the processor to flush its last block
-    await new Promise<void>((r) => setTimeout(r, 200));
-
-    processor.disconnect();
-    source.disconnect();
-    silentGain.disconnect();
-    await audioCtx.close();
-
-    // 4. Encode captured samples to WAV
-    const captured = writePos;
-    const wavBuffer = encodeWavStereo16(
-      leftBuf.subarray(0, captured),
-      rightBuf.subarray(0, captured),
-      SAMPLE_RATE,
-    );
-
-    return new File([wavBuffer], `${baseName}.wav`, { type: 'audio/wav' });
-  } finally {
-    URL.revokeObjectURL(objectUrl);
+  if (!(outputData instanceof Uint8Array) || outputData.length === 0) {
+    throw new Error(`"${file.name}" から音声を抽出できませんでした。非対応のコーデックの可能性があります。`);
   }
+
+  onProgress?.('完了');
+  return new File([outputData], `${baseName}.wav`, { type: 'audio/wav' });
 }
