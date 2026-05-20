@@ -134,7 +134,7 @@
     <aside
       class="
         fixed top-0 left-0 h-full w-72 z-50 bg-surface border-r border-surface-lighter
-        overflow-y-auto transition-transform duration-300 p-3
+        overflow-y-auto transition-transform duration-300 px-3 pb-3 safe-area-drawer
         md:relative md:z-auto md:flex-shrink-0 md:p-4
         {$showTrackListStore ? 'translate-x-0' : '-translate-x-full md:hidden'}
       "

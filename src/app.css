@@ -69,3 +69,25 @@ input[type="range"]::-webkit-slider-thumb:hover {
     padding-bottom: env(safe-area-inset-bottom);
   }
 }
+
+/* Safe area inset top: システムバーとヘッダーの重なりを防ぐ (viewport-fit=cover + black-translucent) */
+header {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+}
+@media (min-width: 768px) {
+  header {
+    /* md:py-3 = 0.75rem */
+    padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  }
+}
+
+/* モバイルのfixed drawers用 (p-3 = 0.75rem の上書き) */
+.safe-area-drawer {
+  padding-top: calc(0.75rem + env(safe-area-inset-top, 0px));
+}
+@media (min-width: 768px) {
+  .safe-area-drawer {
+    /* md以上ではfixed配置ではないためデフォルトに戻す (md:p-4 = 1rem) */
+    padding-top: 1rem;
+  }
+}
